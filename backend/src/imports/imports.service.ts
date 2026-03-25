@@ -176,11 +176,11 @@ export class ImportsService {
 
   /**
    * Process FORMP&D PDF using AI extraction via Valkey queue.
+   * CNPJ and fiscal year are both extracted from the PDF by the AI.
    */
-  async processFormpdPdf(file: Express.Multer.File, companyId: number, baseYear: string) {
-    this.logger.log(`Starting FORMP&D IA extraction flow for Company ${companyId}, Year ${baseYear}`);
+  async processFormpdPdf(file: Express.Multer.File) {
+    this.logger.log(`Starting FORMP&D IA extraction flow — year and CNPJ will be extracted by AI`);
 
-    // Crear o lote para monitoramento
     const batch = await this.prisma.import_batches.create({
       data: {
         entity_type: 'FORMPD_AI_EXTRACTION',
@@ -190,24 +190,33 @@ export class ImportsService {
       }
     });
 
-    // Enfileirar o arquivo salvo no disco
     await this.formpdQueue.add('extract-pdf', {
       batchId: batch.id,
-      filePath: file.path, 
-      companyId: companyId,
-      baseYear: baseYear
+      filePath: file.path,
     }, {
       attempts: 3,
-      backoff: 5000
+      backoff: { type: 'fixed', delay: 5000 },
     });
 
     this.notificationsGateway.sendProgress({ current: 0, total: 1, message: `PDF enviado para processamento por IA.` });
 
-    return { 
-      success: true, 
-      batchId: batch.id, 
-      message: 'Arquivo enfileirado para extração via IA.' 
+    return {
+      success: true,
+      batchId: batch.id,
+      message: 'Arquivo enfileirado para extração via IA.',
     };
+  }
+
+  /**
+   * Check if a CNPJ is already registered in the companies table.
+   */
+  async checkCnpj(rawCnpj: string) {
+    const cnpj = rawCnpj.replace(/\D/g, '').padStart(14, '0');
+    const company = await this.prisma.companies.findUnique({
+      where: { cnpj },
+      select: { id: true, cnpj: true, legal_name: true },
+    });
+    return { found: !!company, company: company ?? null };
   }
 
   async getBatches() {

@@ -30,4 +30,16 @@ export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection,
   sendCompleted(data: { success: number, failed: number, total: number }) {
     this.server.emit('import:completed', data);
   }
+
+  sendFormpdCompleted(data: {
+    batchId: number;
+    isValidFormpd: boolean;
+    validationError?: string;
+    cnpjFromForm: string | null;
+    companyId: number | null;
+    companyName: string | null;
+    companyRegistrationQueued: boolean;
+  }) {
+    this.server.emit('formpd:completed', data);
+  }
 }

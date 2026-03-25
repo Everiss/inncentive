@@ -48,26 +48,16 @@ export class ImportsController {
 
   @Post('upload-formpd-ai')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  async uploadFormpdAi(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: { companyId: string; cnpj: string; anoBase: string }
-  ) {
+  async uploadFormpdAi(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    if (!body.companyId) throw new BadRequestException('ID da empresa é obrigatório');
-    if (!body.cnpj) throw new BadRequestException('CNPJ é obrigatório');
-    if (!body.anoBase) throw new BadRequestException('Ano Base é obrigatório');
 
-    // Agora temos todos os campos do body disponíveis
-    // Construímos e criamos o diretório manualmente, garantindo o caminho correto
-    const cnpj = body.cnpj.replace(/\D/g, '');
-    const anoBase = body.anoBase;
-    const destDir = path.join(process.cwd(), 'upload', cnpj, anoBase, 'FORM');
+    // CNPJ e ano-base serão extraídos do PDF pela IA
+    const destDir = path.join(process.cwd(), 'upload', 'pending', 'FORM');
 
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
 
-    // Salvar o buffer em disco com nome único
     const timestamp = Date.now();
     const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
     const finalFileName = `${timestamp}-${cleanFileName}`;
@@ -75,16 +65,17 @@ export class ImportsController {
 
     fs.writeFileSync(finalPath, file.buffer);
 
-    // Substituir o file.path pelo caminho correto para o processador de IA
     file.path = finalPath;
     file.destination = destDir;
     file.filename = finalFileName;
 
-    return this.importsService.processFormpdPdf(
-      file, 
-      Number(body.companyId), 
-      anoBase
-    );
+    return this.importsService.processFormpdPdf(file);
+  }
+
+  @Get('check-cnpj')
+  async checkCnpj(@Query('cnpj') cnpj: string) {
+    if (!cnpj) throw new BadRequestException('CNPJ é obrigatório');
+    return this.importsService.checkCnpj(cnpj);
   }
 
   @Get('batches')
