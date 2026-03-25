@@ -1,0 +1,1677 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model addresses {
+  id           Int       @id @default(autoincrement())
+  company_id   Int
+  street       String?   @db.VarChar(255)
+  number       String?   @db.VarChar(50)
+  complement   String?   @db.VarChar(255)
+  neighborhood String?   @db.VarChar(100)
+  city         String?   @db.VarChar(100)
+  state        String?   @db.Char(2)
+  zip_code     String?   @db.VarChar(10)
+  companies    companies @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "addresses_ibfk_1")
+
+  @@index([company_id], map: "company_id")
+}
+
+model cnaes {
+  code          String          @id @db.VarChar(20)
+  description   String          @db.Text
+  company_cnaes company_cnaes[]
+}
+
+model companies {
+  id                         Int                          @id @default(autoincrement())
+  cnpj                       String                       @unique(map: "cnpj") @db.VarChar(20)
+  legal_name                 String                       @db.VarChar(255)
+  trade_name                 String?                      @db.VarChar(255)
+  open_date                  DateTime?                    @db.Date
+  legal_nature               String?                      @db.VarChar(255)
+  porte                      String?                      @db.VarChar(100)
+  capital_social             Decimal?                     @db.Decimal(15, 2)
+  situation                  String?                      @db.VarChar(50)
+  situation_reason           String?                      @db.Text
+  situation_date             DateTime?                    @db.Date
+  email                      String?                      @db.VarChar(255)
+  status                     String?                      @db.VarChar(50)
+  updated_at                 DateTime?                    @db.DateTime(0)
+  created_at                 DateTime?                    @default(now()) @db.Timestamp(0)
+  addresses                  addresses[]
+  company_cnaes              company_cnaes[]
+  company_fiscal_year_config company_fiscal_year_config[]
+  company_obligations        company_obligations[]
+  company_partners           company_partners[]
+  phones                     company_phones[]
+  contact_companies          contact_companies[]
+  dirbi_monthly_records      dirbi_monthly_records[]
+  ecf_lalur_entries          ecf_lalur_entries[]
+  formpd_forms               formpd_forms[]
+  payroll_import_jobs        payroll_import_jobs[]
+  payroll_import_templates   payroll_import_templates[]
+  payroll_rubric_catalog     payroll_rubric_catalog[]
+  payroll_rubric_maps        payroll_rubric_maps[]
+  payroll_sheets             payroll_sheets[]
+  rdi_assets                 rdi_assets[]
+  rdi_expense_documents      rdi_expense_documents[]
+  rdi_hr_timesheets          rdi_hr_timesheets[]
+  rdi_overhead_rates         rdi_overhead_rates[]
+  rdi_projects               rdi_projects[]
+  rdi_timesheet_entries      rdi_timesheet_entries[]
+  tax_regregimes             tax_regregimes[]
+  user_company_access        user_company_access[]
+}
+
+model company_cnaes {
+  company_id Int
+  cnae_code  String    @db.VarChar(20)
+  is_primary Boolean?  @default(false)
+  companies  companies @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "company_cnaes_ibfk_1")
+  cnaes      cnaes     @relation(fields: [cnae_code], references: [code], onDelete: Cascade, onUpdate: NoAction, map: "company_cnaes_ibfk_2")
+
+  @@id([company_id, cnae_code])
+  @@index([cnae_code], map: "cnae_code")
+}
+
+model company_partners {
+  id                      Int       @id @default(autoincrement())
+  company_id              Int
+  partner_id              Int
+  qualification           String?   @db.VarChar(255)
+  legal_rep_name          String?   @db.VarChar(255)
+  legal_rep_qualification String?   @db.VarChar(255)
+  companies               companies @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "company_partners_ibfk_1")
+  partners                partners  @relation(fields: [partner_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "company_partners_ibfk_2")
+
+  @@index([company_id], map: "company_id")
+  @@index([partner_id], map: "partner_id")
+}
+
+model partners {
+  id               Int                @id @default(autoincrement())
+  name             String             @db.VarChar(255)
+  country_origin   String?            @db.VarChar(100)
+  company_partners company_partners[]
+
+  @@unique([name, country_origin], map: "name")
+}
+
+model tax_regregimes {
+  id           Int                 @id @default(autoincrement())
+  company_id   Int
+  type         tax_regregimes_type
+  is_optant    Boolean?            @default(false)
+  opt_in_date  DateTime?           @db.Date
+  opt_out_date DateTime?           @db.Date
+  updated_at   DateTime?           @db.DateTime(0)
+  companies    companies           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "tax_regregimes_ibfk_1")
+
+  @@index([company_id], map: "company_id")
+}
+
+model import_batches {
+  id                Int            @id @default(autoincrement())
+  entity_type       String         @db.VarChar(50)
+  file_name         String         @db.VarChar(255)
+  status            String         @default("PENDING") @db.VarChar(50)
+  total_records     Int            @default(0)
+  processed_records Int            @default(0)
+  success_count     Int            @default(0)
+  error_count       Int            @default(0)
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @default(now()) @updatedAt
+  items             import_items[]
+}
+
+model import_items {
+  id            Int            @id @default(autoincrement())
+  batch_id      Int
+  record_data   String         @db.Text
+  status        String         @default("PENDING") @db.VarChar(50)
+  error_message String?        @db.Text
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @default(now()) @updatedAt
+  batch         import_batches @relation(fields: [batch_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_import_items_batch")
+
+  @@index([batch_id], map: "fk_import_items_batch")
+}
+
+/// Central person entity. All collaborators and users MUST have a contacts record first.
+model contacts {
+  id                                                            Int                                @id @default(autoincrement())
+  name                                                          String                             @db.VarChar(255)
+  email                                                         String?                            @unique
+  cpf                                                           String?                            @unique @db.VarChar(14)
+  avatar_url                                                    String?                            @db.VarChar(500)
+  created_at                                                    DateTime                           @default(now()) @db.Timestamp(0)
+  updated_at                                                    DateTime                           @default(now()) @updatedAt @db.DateTime(0)
+  collaborator                                                  collaborators?
+  contact_companies                                             contact_companies[]
+  phones                                                        contact_phones[]
+  formpd_form_representatives                                   formpd_form_representatives[]
+  formpd_opinions                                               formpd_opinions[]
+  formpd_project_human_resources                                formpd_project_human_resources[]
+  payroll_import_jobs_payroll_import_jobs_created_byTocontacts  payroll_import_jobs[]              @relation("payroll_import_jobs_created_byTocontacts")
+  payroll_import_jobs_payroll_import_jobs_promoted_byTocontacts payroll_import_jobs[]              @relation("payroll_import_jobs_promoted_byTocontacts")
+  payroll_import_template_versions                              payroll_import_template_versions[]
+  payroll_rubric_catalog                                        payroll_rubric_catalog[]
+  payroll_rubric_maps                                           payroll_rubric_maps[]
+  payroll_sheet_items                                           payroll_sheet_items[]
+  payroll_sheets_payroll_sheets_approved_byTocontacts           payroll_sheets[]                   @relation("payroll_sheets_approved_byTocontacts")
+  payroll_sheets_payroll_sheets_imported_byTocontacts           payroll_sheets[]                   @relation("payroll_sheets_imported_byTocontacts")
+  rdi_expense_allocations                                       rdi_expense_allocations[]
+  rdi_expense_documents                                         rdi_expense_documents[]
+  rdi_hr_allocations_rdi_hr_allocations_contact_idTocontacts    rdi_hr_allocations[]               @relation("rdi_hr_allocations_contact_idTocontacts")
+  rdi_hr_allocations_rdi_hr_allocations_reviewed_byTocontacts   rdi_hr_allocations[]               @relation("rdi_hr_allocations_reviewed_byTocontacts")
+  rdi_hr_timesheets_rdi_hr_timesheets_approved_byTocontacts     rdi_hr_timesheets[]                @relation("rdi_hr_timesheets_approved_byTocontacts")
+  rdi_hr_timesheets_rdi_hr_timesheets_contact_idTocontacts      rdi_hr_timesheets[]                @relation("rdi_hr_timesheets_contact_idTocontacts")
+  rdi_overhead_rates                                            rdi_overhead_rates[]
+  rdi_project_annual_snapshots                                  rdi_project_annual_snapshots[]
+  rdi_project_documents                                         rdi_project_documents[]
+  rdi_projects                                                  rdi_projects[]
+  rdi_timesheet_entries                                         rdi_timesheet_entries[]
+  user                                                          users?
+}
+
+/// A contact can be linked to many companies, with a different role per link.
+model contact_companies {
+  id         Int       @id @default(autoincrement())
+  contact_id Int
+  company_id Int
+  role       String    @default("COMUM") @db.VarChar(20)
+  notes      String?   @db.Text
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  company    companies @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_company")
+  contact    contacts  @relation(fields: [contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_cc_contact")
+
+  @@index([company_id])
+  @@index([contact_id])
+  @@index([contact_id, company_id, role])
+}
+
+/// Optional 1:1 extension for contacts who are employees/collaborators.
+model collaborators {
+  id                          Int                           @id @default(autoincrement())
+  contact_id                  Int                           @unique
+  position                    String?                       @db.VarChar(255)
+  department                  String?                       @db.VarChar(255)
+  admission_date              DateTime?                     @db.Date
+  termination_date            DateTime?                     @db.Date
+  registration_number         String?                       @db.VarChar(50)
+  observations                String?                       @db.Text
+  is_active                   Boolean                       @default(true)
+  employment_type             collaborators_employment_type @default(CLT)
+  academic_degree             collaborators_academic_degree @default(NAO_INFORMADO)
+  is_researcher               Boolean                       @default(false)
+  created_at                  DateTime                      @default(now()) @db.Timestamp(0)
+  updated_at                  DateTime                      @default(now()) @updatedAt @db.DateTime(0)
+  contact                     contacts                      @relation(fields: [contact_id], references: [id], onUpdate: NoAction, map: "fk_collab_contact")
+  payroll_import_staging_rows payroll_import_staging_rows[]
+  payroll_sheets              payroll_sheets[]
+}
+
+/// Optional 1:1 extension for contacts with system access.
+/// Login email = contacts.email — no duplication.
+model users {
+  id                                                        Int                   @id @default(autoincrement())
+  contact_id                                                Int                   @unique
+  password_hash                                             String                @db.VarChar(255)
+  system_role                                               system_role           @default(VIEWER)
+  is_active                                                 Boolean               @default(true)
+  last_login                                                DateTime?             @db.DateTime(0)
+  created_at                                                DateTime              @default(now()) @db.Timestamp(0)
+  updated_at                                                DateTime              @default(now()) @updatedAt @db.DateTime(0)
+  user_company_access_user_company_access_granted_byTousers user_company_access[] @relation("user_company_access_granted_byTousers")
+  user_company_access_user_company_access_user_idTousers    user_company_access[] @relation("user_company_access_user_idTousers")
+  contact                                                   contacts              @relation(fields: [contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_users_contact")
+}
+
+/// One contact can have many phones with different types.
+model contact_phones {
+  id         Int        @id @default(autoincrement())
+  contact_id Int
+  number     String     @db.VarChar(30)
+  type       phone_type @default(CELULAR)
+  is_primary Boolean    @default(false)
+  created_at DateTime   @default(now()) @db.Timestamp(0)
+  updated_at DateTime   @default(now()) @updatedAt @db.DateTime(0)
+  contact    contacts   @relation(fields: [contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_cont_phones_contact")
+
+  @@index([contact_id])
+}
+
+/// One company can have many phones with different types.
+model company_phones {
+  id         Int        @id @default(autoincrement())
+  company_id Int
+  number     String     @db.VarChar(30)
+  type       phone_type @default(FIXO)
+  is_primary Boolean    @default(false)
+  created_at DateTime   @default(now()) @db.Timestamp(0)
+  updated_at DateTime   @default(now()) @updatedAt @db.DateTime(0)
+  company    companies  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_comp_phones_company")
+
+  @@index([company_id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model company_fiscal_year_config {
+  id             Int       @id @default(autoincrement())
+  company_id     Int
+  base_year      Int       @db.Year
+  irpj_rate      Decimal   @default(0.2500) @db.Decimal(5, 4)
+  csll_rate      Decimal   @default(0.0900) @db.Decimal(5, 4)
+  lalur_book_ref String?   @db.VarChar(100)
+  created_at     DateTime  @default(now()) @db.Timestamp(0)
+  updated_at     DateTime  @default(now()) @db.DateTime(0)
+  companies      companies @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_fiscal_config_company")
+
+  @@unique([company_id, base_year], map: "uk_company_fiscal_year")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model company_obligations {
+  id                  Int                        @id @default(autoincrement())
+  company_id          Int
+  calendar_id         Int
+  reference_date      DateTime                   @db.Date
+  due_date            DateTime                   @db.Date
+  status              company_obligations_status @default(PENDENTE)
+  filed_at            DateTime?                  @db.DateTime(0)
+  receipt_number      String?                    @db.VarChar(100)
+  alert_config        String?                    @default("30,15,7") @db.VarChar(50)
+  created_at          DateTime                   @default(now()) @db.Timestamp(0)
+  updated_at          DateTime                   @default(now()) @db.DateTime(0)
+  obligation_calendar obligation_calendar        @relation(fields: [calendar_id], references: [id], onUpdate: NoAction, map: "fk_comp_oblig_calendar")
+  companies           companies                  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_comp_oblig_company")
+
+  @@unique([company_id, calendar_id, reference_date], map: "uk_company_obligation")
+  @@index([calendar_id], map: "fk_comp_oblig_calendar")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model dirbi_monthly_records {
+  id                    Int                          @id @default(autoincrement())
+  company_id            Int
+  competence_month      DateTime                     @db.Date
+  total_eligible_amount Decimal                      @db.Decimal(15, 2)
+  estimated_tax_savings Decimal                      @db.Decimal(15, 2)
+  status                dirbi_monthly_records_status @default(PENDENTE)
+  receipt_number        String?                      @db.VarChar(100)
+  created_at            DateTime                     @default(now()) @db.Timestamp(0)
+  companies             companies                    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_dirbi_company")
+
+  @@unique([company_id, competence_month], map: "uk_dirbi_company_month")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ecf_lalur_entries {
+  id                       Int                          @id @default(autoincrement())
+  company_id               Int
+  base_year                Int                          @db.Year
+  incentive_id             Int
+  entry_type               ecf_lalur_entries_entry_type
+  amount                   Decimal                      @db.Decimal(15, 2)
+  history_text             String                       @db.VarChar(500)
+  created_at               DateTime                     @default(now()) @db.Timestamp(0)
+  companies                companies                    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_lalur_company")
+  formpd_fiscal_incentives formpd_fiscal_incentives     @relation(fields: [incentive_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_lalur_incentive")
+
+  @@index([company_id], map: "fk_lalur_company")
+  @@index([incentive_id], map: "fk_lalur_incentive")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_fiscal_incentives {
+  id                          Int                 @id @default(autoincrement())
+  form_id                     Int                 @unique(map: "uq_incentives_form")
+  total_rnd_expenditure       Decimal?            @default(0.00) @db.Decimal(18, 2)
+  ir_deduction_base           Decimal?            @default(0.00) @db.Decimal(18, 2)
+  ir_deduction_pct            Decimal?            @default(0.00) @db.Decimal(5, 2)
+  ir_deduction_amount         Decimal?            @default(0.00) @db.Decimal(18, 2)
+  csll_deduction_amount       Decimal?            @default(0.00) @db.Decimal(18, 2)
+  additional_deduction_pct    Decimal?            @default(0.00) @db.Decimal(5, 2)
+  additional_deduction_amount Decimal?            @default(0.00) @db.Decimal(18, 2)
+  accelerated_depreciation    Decimal?            @default(0.00) @db.Decimal(18, 2)
+  total_benefit               Decimal?            @default(0.00) @db.Decimal(18, 2)
+  lalur_reference             String?             @db.VarChar(100)
+  created_at                  DateTime            @default(now()) @db.Timestamp(0)
+  updated_at                  DateTime            @default(now()) @db.DateTime(0)
+  ecf_lalur_entries           ecf_lalur_entries[]
+  formpd_forms                formpd_forms        @relation(fields: [form_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_incentives_form")
+}
+
+model formpd_form_representatives {
+  id           Int                                      @id @default(autoincrement())
+  form_id      Int
+  contact_id   Int
+  profile_type formpd_form_representatives_profile_type
+  is_active    Boolean                                  @default(true)
+  created_at   DateTime                                 @default(now()) @db.Timestamp(0)
+  contacts     contacts                                 @relation(fields: [contact_id], references: [id], onUpdate: NoAction, map: "fk_repr_contact")
+  formpd_forms formpd_forms                             @relation(fields: [form_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_repr_form")
+
+  @@unique([form_id, contact_id], map: "uq_form_contact")
+  @@index([contact_id], map: "fk_repr_contact")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_forms {
+  id                          Int                             @id @default(autoincrement())
+  company_id                  Int
+  base_year                   Int                             @db.SmallInt
+  status                      formpd_forms_status             @default(NAO_PREENCHIDO)
+  fiscal_loss                 Boolean                         @default(false)
+  fiscal_loss_amount          Decimal?                        @db.Decimal(18, 2)
+  fiscal_loss_has_benefit     Boolean?
+  submission_status           formpd_forms_submission_status? @default(PENDENTE)
+  submitted_at                DateTime?                       @db.DateTime(0)
+  mcti_protocol               String?                         @db.VarChar(100)
+  feedback_mcti               String?                         @db.Text
+  created_at                  DateTime                        @default(now()) @db.Timestamp(0)
+  updated_at                  DateTime                        @default(now()) @db.DateTime(0)
+  formpd_fiscal_incentives    formpd_fiscal_incentives?
+  formpd_form_representatives formpd_form_representatives[]
+  companies                   companies                       @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_formpd_forms_company")
+  formpd_opinions             formpd_opinions[]
+  formpd_project_mapping      formpd_project_mapping[]
+  formpd_projects             formpd_projects[]
+
+  @@unique([company_id, base_year], map: "uq_company_year")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_opinions {
+  id                    Int                             @id @default(autoincrement())
+  form_id               Int
+  project_id            Int?
+  opinion_type          formpd_opinions_opinion_type    @default(EM_ANALISE)
+  mcti_notes            String?                         @db.Text
+  opinion_date          DateTime?                       @db.Date
+  dou_publication_date  DateTime?                       @db.Date
+  status                formpd_opinions_status          @default(PENDENTE_CIENCIA)
+  acknowledged_at       DateTime?                       @db.DateTime(0)
+  acknowledged_by       Int?
+  is_contested          Boolean                         @default(false)
+  contested_at          DateTime?                       @db.DateTime(0)
+  contest_justification String?                         @db.Text
+  contest_status        formpd_opinions_contest_status? @default(NAO_CONTESTADO)
+  contest_mcti_response String?                         @db.Text
+  contest_response_date DateTime?                       @db.Date
+  has_appeal            Boolean                         @default(false)
+  appeal_filed_at       DateTime?                       @db.DateTime(0)
+  appeal_status         formpd_opinions_appeal_status?  @default(NAO_RECORRIDO)
+  appeal_response       String?                         @db.Text
+  created_at            DateTime                        @default(now()) @db.Timestamp(0)
+  updated_at            DateTime                        @default(now()) @db.DateTime(0)
+  contacts              contacts?                       @relation(fields: [acknowledged_by], references: [id], onUpdate: NoAction, map: "fk_opinions_ack_by")
+  formpd_forms          formpd_forms                    @relation(fields: [form_id], references: [id], onUpdate: NoAction, map: "fk_opinions_form")
+  formpd_projects       formpd_projects?                @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_opinions_project")
+
+  @@index([acknowledged_by], map: "fk_opinions_ack_by")
+  @@index([form_id], map: "idx_opinions_form")
+  @@index([project_id], map: "idx_opinions_project")
+}
+
+model formpd_project_equipment {
+  id               Int                             @id @default(autoincrement())
+  project_id       Int
+  origin           formpd_project_equipment_origin
+  description      String                          @db.VarChar(500)
+  ncm_code         String?                         @db.VarChar(10)
+  quantity         Int?                            @default(1)
+  unit_amount      Decimal                         @default(0.00) @db.Decimal(18, 2)
+  total_amount     Decimal?                        @db.Decimal(18, 2)
+  acquisition_date DateTime?                       @db.Date
+  supplier_cnpj    String?                         @db.VarChar(20)
+  created_at       DateTime                        @default(now()) @db.Timestamp(0)
+  formpd_projects  formpd_projects                 @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_equipment_project")
+
+  @@index([project_id], map: "idx_equipment_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_project_expenses {
+  id                Int                                      @id @default(autoincrement())
+  project_id        Int
+  expense_category  formpd_project_expenses_expense_category
+  description       String?                                  @db.VarChar(500)
+  supplier_name     String?                                  @db.VarChar(255)
+  supplier_cnpj_cpf String?                                  @db.VarChar(20)
+  amount            Decimal                                  @default(0.00) @db.Decimal(18, 2)
+  reference_period  String?                                  @db.VarChar(20)
+  created_at        DateTime                                 @default(now()) @db.Timestamp(0)
+  formpd_projects   formpd_projects                          @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_expenses_project")
+
+  @@index([project_id], map: "idx_expenses_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_project_human_resources {
+  id                      Int             @id @default(autoincrement())
+  project_id              Int
+  contact_id              Int?
+  name                    String          @db.VarChar(255)
+  cpf                     String?         @db.VarChar(14)
+  role                    String?         @db.VarChar(255)
+  dedication_pct          Decimal?        @db.Decimal(5, 2)
+  is_exclusive_researcher Boolean         @default(false)
+  annual_amount           Decimal?        @db.Decimal(18, 2)
+  created_at              DateTime        @default(now()) @db.Timestamp(0)
+  contacts                contacts?       @relation(fields: [contact_id], references: [id], onUpdate: NoAction, map: "fk_hr_contact")
+  formpd_projects         formpd_projects @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_hr_project")
+
+  @@index([contact_id], map: "fk_hr_contact")
+  @@index([project_id], map: "idx_hr_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_project_mapping {
+  id                           Int                          @id @default(autoincrement())
+  rdi_project_id               Int
+  snapshot_id                  Int
+  formpd_project_id            Int
+  formpd_form_id               Int
+  hr_amount_mapped             Decimal?                     @default(0.00) @db.Decimal(18, 2)
+  expense_amount_mapped        Decimal?                     @default(0.00) @db.Decimal(18, 2)
+  is_primary                   Boolean                      @default(true)
+  mapping_notes                String?                      @db.Text
+  created_at                   DateTime                     @default(now()) @db.Timestamp(0)
+  updated_at                   DateTime                     @default(now()) @db.DateTime(0)
+  formpd_forms                 formpd_forms                 @relation(fields: [formpd_form_id], references: [id], onUpdate: NoAction, map: "fk_mapping_form")
+  formpd_projects              formpd_projects              @relation(fields: [formpd_project_id], references: [id], onUpdate: NoAction, map: "fk_mapping_formpd")
+  rdi_projects                 rdi_projects                 @relation(fields: [rdi_project_id], references: [id], onUpdate: NoAction, map: "fk_mapping_rdi")
+  rdi_project_annual_snapshots rdi_project_annual_snapshots @relation(fields: [snapshot_id], references: [id], onUpdate: NoAction, map: "fk_mapping_snapshot")
+
+  @@unique([rdi_project_id, formpd_project_id, formpd_form_id], map: "uq_rdi_formpd_form")
+  @@index([snapshot_id], map: "fk_mapping_snapshot")
+  @@index([formpd_form_id], map: "idx_mapping_form")
+  @@index([formpd_project_id], map: "idx_mapping_formpd_proj")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_project_partners {
+  id              Int                                  @id @default(autoincrement())
+  project_id      Int
+  partner_type    formpd_project_partners_partner_type
+  cnpj_cpf        String?                              @db.VarChar(20)
+  name            String                               @db.VarChar(255)
+  role            String?                              @db.VarChar(255)
+  shared_amount   Decimal?                             @db.Decimal(18, 2)
+  created_at      DateTime                             @default(now()) @db.Timestamp(0)
+  formpd_projects formpd_projects                      @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_partners_project")
+
+  @@index([project_id], map: "idx_partners_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_project_patents {
+  id                  Int                               @id @default(autoincrement())
+  project_id          Int
+  asset_type          formpd_project_patents_asset_type
+  title               String                            @db.VarChar(500)
+  registration_number String?                           @db.VarChar(100)
+  registry_office     String?                           @db.VarChar(100)
+  filing_date         DateTime?                         @db.Date
+  grant_date          DateTime?                         @db.Date
+  amount              Decimal?                          @db.Decimal(18, 2)
+  created_at          DateTime                          @default(now()) @db.Timestamp(0)
+  formpd_projects     formpd_projects                   @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_patents_project")
+
+  @@index([project_id], map: "idx_patents_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model formpd_projects {
+  id                             Int                              @id @default(autoincrement())
+  form_id                        Int
+  title                          String                           @db.VarChar(500)
+  description                    String                           @db.Text
+  tech_area_code                 String?                          @db.VarChar(10)
+  tech_area_label                String?                          @db.VarChar(200)
+  is_continuous                  Boolean                          @default(false)
+  start_date                     DateTime?                        @db.Date
+  end_date                       DateTime?                        @db.Date
+  previous_years_info            String?                          @db.Text
+  aligns_public_policy           Boolean?                         @default(false)
+  public_policy_ref              String?                          @db.VarChar(500)
+  art19a_applicable              Boolean?                         @default(false)
+  project_status                 formpd_projects_project_status?  @default(RASCUNHO)
+  created_at                     DateTime                         @default(now()) @db.Timestamp(0)
+  updated_at                     DateTime                         @default(now()) @db.DateTime(0)
+  formpd_opinions                formpd_opinions[]
+  formpd_project_equipment       formpd_project_equipment[]
+  formpd_project_expenses        formpd_project_expenses[]
+  formpd_project_human_resources formpd_project_human_resources[]
+  formpd_project_mapping         formpd_project_mapping[]
+  formpd_project_partners        formpd_project_partners[]
+  formpd_project_patents         formpd_project_patents[]
+  formpd_forms                   formpd_forms                     @relation(fields: [form_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_projects_form")
+
+  @@index([form_id], map: "idx_projects_form")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model obligation_calendar {
+  id                  Int                                   @id @default(autoincrement())
+  obligation_type     obligation_calendar_obligation_type
+  competence_period   obligation_calendar_competence_period
+  due_day             Int?
+  due_month           Int?
+  description         String                                @db.VarChar(255)
+  company_obligations company_obligations[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_employer_charges {
+  id                      Int            @id @default(autoincrement())
+  sheet_id                Int            @unique(map: "uq_charges_sheet")
+  inss_patronal           Decimal        @default(0.00) @db.Decimal(18, 2)
+  fgts                    Decimal        @default(0.00) @db.Decimal(18, 2)
+  rat_sat                 Decimal        @default(0.00) @db.Decimal(18, 2)
+  terceiros               Decimal        @default(0.00) @db.Decimal(18, 2)
+  vale_transporte_empresa Decimal        @default(0.00) @db.Decimal(18, 2)
+  vale_refeicao           Decimal        @default(0.00) @db.Decimal(18, 2)
+  plano_saude             Decimal        @default(0.00) @db.Decimal(18, 2)
+  plano_odonto            Decimal        @default(0.00) @db.Decimal(18, 2)
+  seguro_vida             Decimal        @default(0.00) @db.Decimal(18, 2)
+  outros_encargos         Decimal        @default(0.00) @db.Decimal(18, 2)
+  total_charges           Decimal        @default(0.00) @db.Decimal(18, 2)
+  total_eligible_charges  Decimal        @default(0.00) @db.Decimal(18, 2)
+  inss_is_eligible        Boolean        @default(true)
+  fgts_is_eligible        Boolean        @default(true)
+  rat_is_eligible         Boolean        @default(true)
+  vt_is_eligible          Boolean        @default(true)
+  vr_is_eligible          Boolean        @default(true)
+  plano_saude_is_eligible Boolean        @default(false)
+  created_at              DateTime       @default(now()) @db.Timestamp(0)
+  updated_at              DateTime       @default(now()) @db.DateTime(0)
+  payroll_sheets          payroll_sheets @relation(fields: [sheet_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_charges_sheet")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_import_column_maps {
+  id                               Int                                         @id @default(autoincrement())
+  template_version_id              Int
+  target_field                     payroll_import_column_maps_target_field
+  source_col_name                  String?                                     @db.VarChar(100)
+  source_col_index                 Int?
+  source_cell_ref                  String?                                     @db.VarChar(20)
+  regex_extract                    String?                                     @db.VarChar(500)
+  value_transform                  payroll_import_column_maps_value_transform? @default(NONE)
+  default_value                    String?                                     @db.VarChar(100)
+  is_required                      Boolean                                     @default(true)
+  payroll_import_template_versions payroll_import_template_versions            @relation(fields: [template_version_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_colmap_version")
+
+  @@unique([template_version_id, target_field], map: "uq_colmap_version_field")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_import_jobs {
+  id                                                 Int                               @id @default(autoincrement())
+  company_id                                         Int
+  template_version_id                                Int?
+  original_filename                                  String                            @db.VarChar(500)
+  s3_raw_key                                         String                            @db.VarChar(500)
+  input_method                                       payroll_import_jobs_input_method
+  job_status                                         payroll_import_jobs_job_status    @default(AGUARDANDO)
+  total_rows                                         Int?                              @default(0)
+  mapped_rows                                        Int?                              @default(0)
+  unmapped_rows                                      Int?                              @default(0)
+  error_rows                                         Int?                              @default(0)
+  ai_extraction_meta                                 Json?
+  processing_started_at                              DateTime?                         @db.DateTime(0)
+  processing_ended_at                                DateTime?                         @db.DateTime(0)
+  promoted_at                                        DateTime?                         @db.DateTime(0)
+  promoted_by                                        Int?
+  created_by                                         Int?
+  created_at                                         DateTime                          @default(now()) @db.Timestamp(0)
+  updated_at                                         DateTime                          @default(now()) @db.DateTime(0)
+  companies                                          companies                         @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_job_company")
+  contacts_payroll_import_jobs_created_byTocontacts  contacts?                         @relation("payroll_import_jobs_created_byTocontacts", fields: [created_by], references: [id], onUpdate: NoAction, map: "fk_job_creator")
+  contacts_payroll_import_jobs_promoted_byTocontacts contacts?                         @relation("payroll_import_jobs_promoted_byTocontacts", fields: [promoted_by], references: [id], onUpdate: NoAction, map: "fk_job_promoter")
+  payroll_import_template_versions                   payroll_import_template_versions? @relation(fields: [template_version_id], references: [id], onUpdate: NoAction, map: "fk_job_template")
+  payroll_import_staging_rows                        payroll_import_staging_rows[]
+
+  @@index([created_by], map: "fk_job_creator")
+  @@index([promoted_by], map: "fk_job_promoter")
+  @@index([template_version_id], map: "fk_job_template")
+  @@index([company_id], map: "idx_job_company")
+  @@index([job_status], map: "idx_job_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_import_staging_items {
+  id                          Int                                      @id @default(autoincrement())
+  staging_row_id              Int
+  raw_rubric_code             String?                                  @db.VarChar(50)
+  raw_rubric_description      String?                                  @db.VarChar(255)
+  raw_rubric_type             String?                                  @db.VarChar(50)
+  raw_reference_value         String?                                  @db.VarChar(50)
+  raw_reference_unit          String?                                  @db.VarChar(20)
+  raw_amount                  Decimal?                                 @db.Decimal(18, 2)
+  resolved_rubric_map_id      Int?
+  item_status                 payroll_import_staging_items_item_status @default(PENDENTE_MAPEAMENTO)
+  ai_suggestion_notes         String?                                  @db.Text
+  payroll_import_staging_rows payroll_import_staging_rows              @relation(fields: [staging_row_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_stg_items_row")
+  payroll_rubric_maps         payroll_rubric_maps?                     @relation(fields: [resolved_rubric_map_id], references: [id], onUpdate: NoAction, map: "fk_stg_items_rubmap")
+
+  @@index([resolved_rubric_map_id], map: "fk_stg_items_rubmap")
+  @@index([staging_row_id], map: "idx_stg_items_row")
+  @@index([item_status], map: "idx_stg_items_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_import_staging_rows {
+  id                           Int                                     @id @default(autoincrement())
+  job_id                       Int
+  row_number                   Int
+  raw_collaborator_ref         String?                                 @db.VarChar(200)
+  resolved_collaborator_id     Int?
+  competence_year              Int?                                    @db.SmallInt
+  competence_month             Int?                                    @db.TinyInt
+  sheet_type                   payroll_import_staging_rows_sheet_type? @default(MENSAL)
+  gross_amount_raw             Decimal?                                @db.Decimal(18, 2)
+  net_amount_raw               Decimal?                                @db.Decimal(18, 2)
+  row_status                   payroll_import_staging_rows_row_status  @default(PENDENTE)
+  validation_errors            Json?
+  payroll_import_staging_items payroll_import_staging_items[]
+  collaborators                collaborators?                          @relation(fields: [resolved_collaborator_id], references: [id], onUpdate: NoAction, map: "fk_staging_collab")
+  payroll_import_jobs          payroll_import_jobs                     @relation(fields: [job_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_staging_job")
+
+  @@index([resolved_collaborator_id], map: "idx_staging_collab")
+  @@index([job_id], map: "idx_staging_job")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_import_template_versions {
+  id                         Int                                                        @id @default(autoincrement())
+  template_id                Int
+  version                    Int                                                        @default(1)
+  file_type                  payroll_import_template_versions_file_type
+  encoding                   String?                                                    @default("UTF-8") @db.VarChar(20)
+  header_rows_skip           Int                                                        @default(0)
+  footer_rows_skip           Int                                                        @default(0)
+  decimal_separator          String?                                                    @default(",") @db.Char(1)
+  sheet_identifier_strategy  payroll_import_template_versions_sheet_identifier_strategy @default(COLUNA_CPF)
+  layout_config              Json?
+  valid_from                 DateTime                                                   @db.Date
+  valid_until                DateTime?                                                  @db.Date
+  is_current                 Boolean                                                    @default(true)
+  created_by                 Int?
+  created_at                 DateTime                                                   @default(now()) @db.Timestamp(0)
+  payroll_import_column_maps payroll_import_column_maps[]
+  payroll_import_jobs        payroll_import_jobs[]
+  contacts                   contacts?                                                  @relation(fields: [created_by], references: [id], onUpdate: NoAction, map: "fk_tplv_creator")
+  payroll_import_templates   payroll_import_templates                                   @relation(fields: [template_id], references: [id], onUpdate: NoAction, map: "fk_tplv_template")
+
+  @@unique([template_id, version], map: "uq_tpl_version")
+  @@index([created_by], map: "fk_tplv_creator")
+  @@index([template_id, is_current], map: "idx_tplv_current")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_import_templates {
+  id                               Int                                  @id @default(autoincrement())
+  company_id                       Int
+  name                             String                               @db.VarChar(100)
+  source_type                      payroll_import_templates_source_type
+  source_system                    String?                              @db.VarChar(100)
+  description                      String?                              @db.Text
+  is_active                        Boolean                              @default(true)
+  created_at                       DateTime                             @default(now()) @db.Timestamp(0)
+  payroll_import_template_versions payroll_import_template_versions[]
+  companies                        companies                            @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_tpl_company")
+
+  @@index([company_id], map: "idx_tpl_company")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_rubric_catalog {
+  id                  Int                                @id @default(autoincrement())
+  company_id          Int
+  code                String                             @db.VarChar(20)
+  description         String                             @db.VarChar(255)
+  rubric_type         payroll_rubric_catalog_rubric_type
+  nature              payroll_rubric_catalog_nature
+  is_eligible_rdi     Boolean?
+  eligibility_basis   String?                            @db.VarChar(500)
+  reviewed_at         DateTime?                          @db.DateTime(0)
+  reviewed_by         Int?
+  is_employer_charge  Boolean                            @default(false)
+  incides_inss        Boolean                            @default(false)
+  incides_fgts        Boolean                            @default(false)
+  incides_irrf        Boolean                            @default(false)
+  incides_13          Boolean                            @default(false)
+  incides_ferias      Boolean                            @default(false)
+  is_active           Boolean                            @default(true)
+  created_at          DateTime                           @default(now()) @db.Timestamp(0)
+  updated_at          DateTime                           @default(now()) @db.DateTime(0)
+  companies           companies                          @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_rubric_company")
+  contacts            contacts?                          @relation(fields: [reviewed_by], references: [id], onUpdate: NoAction, map: "fk_rubric_reviewer")
+  payroll_rubric_maps payroll_rubric_maps[]
+  payroll_sheet_items payroll_sheet_items[]
+
+  @@unique([company_id, code], map: "uq_rubric_company_code")
+  @@index([reviewed_by], map: "fk_rubric_reviewer")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_rubric_maps {
+  id                           Int                                @id @default(autoincrement())
+  company_id                   Int
+  rubric_catalog_id            Int
+  source_code                  String?                            @db.VarChar(50)
+  source_description_pattern   String?                            @db.VarChar(500)
+  match_strategy               payroll_rubric_maps_match_strategy @default(CODE_EXACT)
+  confirmed_by_human           Boolean                            @default(false)
+  confirmed_by                 Int?
+  confirmed_at                 DateTime?                          @db.DateTime(0)
+  valid_from                   DateTime                           @db.Date
+  valid_until                  DateTime?                          @db.Date
+  created_at                   DateTime                           @default(now()) @db.Timestamp(0)
+  payroll_import_staging_items payroll_import_staging_items[]
+  payroll_rubric_catalog       payroll_rubric_catalog             @relation(fields: [rubric_catalog_id], references: [id], onUpdate: NoAction, map: "fk_rubmap_catalog")
+  companies                    companies                          @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_rubmap_company")
+  contacts                     contacts?                          @relation(fields: [confirmed_by], references: [id], onUpdate: NoAction, map: "fk_rubmap_confirmer")
+
+  @@index([rubric_catalog_id], map: "fk_rubmap_catalog")
+  @@index([confirmed_by], map: "fk_rubmap_confirmer")
+  @@index([company_id, source_code], map: "idx_rubmap_code")
+  @@index([company_id], map: "idx_rubmap_company")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_sheet_items {
+  id                      Int                             @id @default(autoincrement())
+  sheet_id                Int
+  rubric_id               Int?
+  rubric_code_snapshot    String                          @db.VarChar(20)
+  rubric_desc_snapshot    String                          @db.VarChar(255)
+  rubric_type             payroll_sheet_items_rubric_type
+  reference_value         Decimal?                        @db.Decimal(12, 4)
+  reference_unit          String?                         @db.VarChar(20)
+  calculated_amount       Decimal                         @default(0.00) @db.Decimal(18, 2)
+  is_eligible_rdi         Boolean?
+  eligibility_override_by Int?
+  eligibility_override_at DateTime?                       @db.DateTime(0)
+  eligibility_notes       String?                         @db.Text
+  sort_order              Int?                            @default(0)
+  created_at              DateTime                        @default(now()) @db.Timestamp(0)
+  contacts                contacts?                       @relation(fields: [eligibility_override_by], references: [id], onUpdate: NoAction, map: "fk_items_override")
+  payroll_rubric_catalog  payroll_rubric_catalog?         @relation(fields: [rubric_id], references: [id], onUpdate: NoAction, map: "fk_items_rubric")
+  payroll_sheets          payroll_sheets                  @relation(fields: [sheet_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_items_sheet")
+  rdi_hr_allocation_items rdi_hr_allocation_items[]
+
+  @@index([eligibility_override_by], map: "fk_items_override")
+  @@index([rubric_id], map: "idx_items_rubric")
+  @@index([sheet_id], map: "idx_items_sheet")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model payroll_sheets {
+  id                                            Int                       @id @default(autoincrement())
+  company_id                                    Int
+  collaborator_id                               Int
+  competence_year                               Int                       @db.SmallInt
+  competence_month                              Int                       @db.TinyInt
+  sheet_type                                    payroll_sheets_sheet_type @default(MENSAL)
+  gross_amount                                  Decimal                   @default(0.00) @db.Decimal(18, 2)
+  total_discounts                               Decimal                   @default(0.00) @db.Decimal(18, 2)
+  net_amount                                    Decimal                   @default(0.00) @db.Decimal(18, 2)
+  eligible_gross                                Decimal                   @default(0.00) @db.Decimal(18, 2)
+  status                                        payroll_sheets_status     @default(IMPORTADO)
+  source_file_ref                               String?                   @db.VarChar(500)
+  source_system                                 String?                   @db.VarChar(100)
+  import_batch_id                               Int?
+  imported_by                                   Int?
+  approved_by                                   Int?
+  approved_at                                   DateTime?                 @db.DateTime(0)
+  created_at                                    DateTime                  @default(now()) @db.Timestamp(0)
+  updated_at                                    DateTime                  @default(now()) @db.DateTime(0)
+  payroll_employer_charges                      payroll_employer_charges?
+  payroll_sheet_items                           payroll_sheet_items[]
+  contacts_payroll_sheets_approved_byTocontacts contacts?                 @relation("payroll_sheets_approved_byTocontacts", fields: [approved_by], references: [id], onUpdate: NoAction, map: "fk_sheet_approver")
+  collaborators                                 collaborators             @relation(fields: [collaborator_id], references: [id], onUpdate: NoAction, map: "fk_sheet_collaborator")
+  companies                                     companies                 @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_sheet_company")
+  contacts_payroll_sheets_imported_byTocontacts contacts?                 @relation("payroll_sheets_imported_byTocontacts", fields: [imported_by], references: [id], onUpdate: NoAction, map: "fk_sheet_importer")
+  rdi_hr_allocations                            rdi_hr_allocations[]
+
+  @@unique([collaborator_id, competence_year, competence_month, sheet_type], map: "uq_sheet_collab_comp_type")
+  @@index([approved_by], map: "fk_sheet_approver")
+  @@index([imported_by], map: "fk_sheet_importer")
+  @@index([company_id, competence_year, competence_month], map: "idx_sheet_company_comp")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_asset_depreciation_entries {
+  id                      Int                                       @id @default(autoincrement())
+  asset_id                Int
+  competence_year         Int                                       @db.SmallInt
+  competence_month        Int                                       @db.TinyInt
+  gross_depreciation      Decimal                                   @db.Decimal(18, 2)
+  rdi_eligible_pct        Decimal                                   @db.Decimal(5, 2)
+  rdi_eligible_amount     Decimal?                                  @db.Decimal(18, 2)
+  entry_type              rdi_asset_depreciation_entries_entry_type @default(NORMAL)
+  is_accelerated          Boolean                                   @default(false)
+  lalur_ref               String?                                   @db.VarChar(100)
+  generated_at            DateTime                                  @default(now()) @db.Timestamp(0)
+  rdi_assets              rdi_assets                                @relation(fields: [asset_id], references: [id], onUpdate: NoAction, map: "fk_deprec_asset")
+  rdi_expense_allocations rdi_expense_allocations[]
+
+  @@unique([asset_id, competence_year, competence_month, entry_type], map: "uq_deprec_asset_period")
+  @@index([competence_year], map: "idx_deprec_year")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_assets {
+  id                             Int                              @id @default(autoincrement())
+  company_id                     Int
+  asset_code                     String?                          @db.VarChar(50)
+  description                    String                           @db.VarChar(500)
+  asset_type                     rdi_assets_asset_type
+  usage_type                     rdi_assets_usage_type            @default(MISTO)
+  acquisition_value              Decimal                          @db.Decimal(18, 2)
+  acquisition_date               DateTime                         @db.Date
+  nf_document_id                 Int?
+  useful_life_years              Decimal                          @db.Decimal(5, 2)
+  depreciation_rate_annual       Decimal?                         @db.Decimal(6, 4)
+  depreciation_method            rdi_assets_depreciation_method   @default(LINEAR)
+  accumulated_depreciation       Decimal                          @default(0.00) @db.Decimal(18, 2)
+  net_book_value                 Decimal?                         @db.Decimal(18, 2)
+  is_eligible_rdi                Boolean                          @default(true)
+  rdi_usage_pct                  Decimal                          @default(100.00) @db.Decimal(5, 2)
+  rdi_usage_basis                rdi_assets_rdi_usage_basis?      @default(DECLARACAO)
+  rdi_usage_justification        String?                          @db.Text
+  status                         rdi_assets_status                @default(ATIVO)
+  deactivation_date              DateTime?                        @db.Date
+  created_at                     DateTime                         @default(now()) @db.Timestamp(0)
+  updated_at                     DateTime                         @default(now()) @db.DateTime(0)
+  rdi_asset_depreciation_entries rdi_asset_depreciation_entries[]
+  companies                      companies                        @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_assets_company")
+  rdi_expense_documents          rdi_expense_documents?           @relation(fields: [nf_document_id], references: [id], onUpdate: NoAction, map: "fk_assets_nf")
+
+  @@index([nf_document_id], map: "fk_assets_nf")
+  @@index([company_id], map: "idx_assets_company")
+  @@index([asset_type, usage_type], map: "idx_assets_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_expense_allocations {
+  id                             Int                                        @id @default(autoincrement())
+  project_id                     Int
+  snapshot_id                    Int?
+  expense_doc_id                 Int
+  depreciation_entry_id          Int?
+  overhead_rate_id               Int?
+  appropriation_type             rdi_expense_allocations_appropriation_type @default(DIRETO)
+  gross_amount                   Decimal                                    @default(0.00) @db.Decimal(18, 2)
+  rdi_pct                        Decimal                                    @default(100.0000) @db.Decimal(7, 4)
+  expense_category               rdi_expense_allocations_expense_category
+  allocated_amount               Decimal                                    @default(0.00) @db.Decimal(18, 2)
+  pct_allocation                 Decimal?                                   @db.Decimal(5, 2)
+  is_eligible                    Boolean                                    @default(true)
+  eligibility_notes              String?                                    @db.Text
+  reviewed_by                    Int?
+  created_at                     DateTime                                   @default(now()) @db.Timestamp(0)
+  updated_at                     DateTime                                   @default(now()) @db.DateTime(0)
+  subvention_deducted            Boolean                                    @default(false)
+  subvention_amount              Decimal                                    @default(0.00) @db.Decimal(18, 2)
+  rdi_asset_depreciation_entries rdi_asset_depreciation_entries?            @relation(fields: [depreciation_entry_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_alloc_deprec")
+  rdi_overhead_rates             rdi_overhead_rates?                        @relation(fields: [overhead_rate_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_alloc_overhead")
+  rdi_expense_documents          rdi_expense_documents                      @relation(fields: [expense_doc_id], references: [id], onUpdate: NoAction, map: "fk_exp_alloc_doc")
+  rdi_projects                   rdi_projects                               @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_exp_alloc_project")
+  contacts                       contacts?                                  @relation(fields: [reviewed_by], references: [id], onUpdate: NoAction, map: "fk_exp_alloc_reviewer")
+  rdi_project_annual_snapshots   rdi_project_annual_snapshots?              @relation(fields: [snapshot_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_exp_alloc_snapshot")
+
+  @@index([depreciation_entry_id], map: "fk_alloc_deprec")
+  @@index([overhead_rate_id], map: "fk_alloc_overhead")
+  @@index([reviewed_by], map: "fk_exp_alloc_reviewer")
+  @@index([snapshot_id], map: "fk_exp_alloc_snapshot")
+  @@index([expense_doc_id], map: "idx_exp_alloc_doc")
+  @@index([project_id], map: "idx_exp_alloc_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_expense_documents {
+  id                      Int                            @id @default(autoincrement())
+  company_id              Int
+  doc_type                rdi_expense_documents_doc_type
+  doc_number              String?                        @db.VarChar(100)
+  supplier_cnpj           String?                        @db.VarChar(20)
+  supplier_name           String?                        @db.VarChar(255)
+  issue_date              DateTime                       @db.Date
+  competence_date         DateTime                       @db.Date
+  total_amount            Decimal                        @default(0.00) @db.Decimal(18, 2)
+  description             String?                        @db.VarChar(500)
+  s3_key                  String?                        @db.VarChar(500)
+  import_batch_id         Int?
+  created_by              Int?
+  created_at              DateTime                       @default(now()) @db.Timestamp(0)
+  rdi_assets              rdi_assets[]
+  rdi_expense_allocations rdi_expense_allocations[]
+  companies               companies                      @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_exp_docs_company")
+  contacts                contacts?                      @relation(fields: [created_by], references: [id], onUpdate: NoAction, map: "fk_exp_docs_creator")
+
+  @@index([created_by], map: "fk_exp_docs_creator")
+  @@index([supplier_cnpj], map: "idx_exp_docs_cnpj")
+  @@index([company_id], map: "idx_exp_docs_company")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_hr_allocation_items {
+  id                         Int                 @id @default(autoincrement())
+  allocation_id              Int
+  sheet_item_id              Int
+  original_amount            Decimal             @db.Decimal(18, 2)
+  allocated_amount           Decimal             @db.Decimal(18, 2)
+  pct_allocation             Decimal             @db.Decimal(5, 2)
+  is_eligible                Boolean             @default(true)
+  eligibility_override_notes String?             @db.Text
+  created_at                 DateTime            @default(now()) @db.Timestamp(0)
+  rdi_hr_allocations         rdi_hr_allocations  @relation(fields: [allocation_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_alloc_items_alloc")
+  payroll_sheet_items        payroll_sheet_items @relation(fields: [sheet_item_id], references: [id], onUpdate: NoAction, map: "fk_alloc_items_item")
+
+  @@unique([allocation_id, sheet_item_id], map: "uq_alloc_items")
+  @@index([sheet_item_id], map: "fk_alloc_items_item")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_hr_allocations {
+  id                                                Int                                  @id @default(autoincrement())
+  snapshot_id                                       Int
+  project_id                                        Int
+  contact_id                                        Int
+  sheet_id                                          Int
+  pct_allocation                                    Decimal                              @db.Decimal(5, 2)
+  gross_eligible_base                               Decimal                              @default(0.00) @db.Decimal(18, 2)
+  charges_eligible_base                             Decimal                              @default(0.00) @db.Decimal(18, 2)
+  total_eligible_amount                             Decimal                              @default(0.00) @db.Decimal(18, 2)
+  allocation_method                                 rdi_hr_allocations_allocation_method @default(PERCENTUAL_FIXO)
+  hours_in_project                                  Decimal?                             @db.Decimal(8, 2)
+  total_hours_month                                 Decimal?                             @db.Decimal(8, 2)
+  justification                                     String?                              @db.Text
+  is_eligible                                       Boolean                              @default(true)
+  reviewed_by                                       Int?
+  reviewed_at                                       DateTime?                            @db.DateTime(0)
+  created_at                                        DateTime                             @default(now()) @db.Timestamp(0)
+  updated_at                                        DateTime                             @default(now()) @db.DateTime(0)
+  rdi_hr_allocation_items                           rdi_hr_allocation_items[]
+  contacts_rdi_hr_allocations_contact_idTocontacts  contacts                             @relation("rdi_hr_allocations_contact_idTocontacts", fields: [contact_id], references: [id], onUpdate: NoAction, map: "fk_alloc_contact")
+  rdi_projects                                      rdi_projects                         @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_alloc_project")
+  contacts_rdi_hr_allocations_reviewed_byTocontacts contacts?                            @relation("rdi_hr_allocations_reviewed_byTocontacts", fields: [reviewed_by], references: [id], onUpdate: NoAction, map: "fk_alloc_reviewer")
+  payroll_sheets                                    payroll_sheets                       @relation(fields: [sheet_id], references: [id], onUpdate: NoAction, map: "fk_alloc_sheet")
+  rdi_project_annual_snapshots                      rdi_project_annual_snapshots         @relation(fields: [snapshot_id], references: [id], onUpdate: NoAction, map: "fk_alloc_snapshot")
+  rdi_timesheet_entries                             rdi_timesheet_entries[]
+
+  @@unique([snapshot_id, contact_id, sheet_id], map: "uq_alloc_snapshot_collab_sheet")
+  @@index([contact_id], map: "fk_alloc_contact")
+  @@index([reviewed_by], map: "fk_alloc_reviewer")
+  @@index([project_id], map: "idx_alloc_project")
+  @@index([sheet_id], map: "idx_alloc_sheet")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_hr_timesheets {
+  id                                               Int                      @id @default(autoincrement())
+  company_id                                       Int
+  contact_id                                       Int
+  period_start                                     DateTime                 @db.Date
+  period_end                                       DateTime                 @db.Date
+  total_hours                                      Decimal                  @default(0.00) @db.Decimal(8, 2)
+  gross_salary                                     Decimal?                 @db.Decimal(18, 2)
+  source_doc_ref                                   String?                  @db.VarChar(100)
+  s3_key                                           String?                  @db.VarChar(500)
+  status                                           rdi_hr_timesheets_status @default(RASCUNHO)
+  approved_by                                      Int?
+  created_at                                       DateTime                 @default(now()) @db.Timestamp(0)
+  contacts_rdi_hr_timesheets_approved_byTocontacts contacts?                @relation("rdi_hr_timesheets_approved_byTocontacts", fields: [approved_by], references: [id], onUpdate: NoAction, map: "fk_ts_approver")
+  companies                                        companies                @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_ts_company")
+  contacts_rdi_hr_timesheets_contact_idTocontacts  contacts                 @relation("rdi_hr_timesheets_contact_idTocontacts", fields: [contact_id], references: [id], onUpdate: NoAction, map: "fk_ts_contact")
+
+  @@index([approved_by], map: "fk_ts_approver")
+  @@index([company_id, period_start, period_end], map: "idx_ts_company_period")
+  @@index([contact_id], map: "idx_ts_contact")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_overhead_rates {
+  id                      Int                                    @id @default(autoincrement())
+  company_id              Int
+  description             String                                 @db.VarChar(255)
+  overhead_type           rdi_overhead_rates_overhead_type
+  apportionment_basis     rdi_overhead_rates_apportionment_basis @default(PERCENTUAL_FIXO)
+  rate_pct                Decimal?                               @db.Decimal(6, 4)
+  numerator_value         Decimal?                               @db.Decimal(14, 4)
+  denominator_value       Decimal?                               @db.Decimal(14, 4)
+  computed_pct            Decimal?                               @db.Decimal(6, 4)
+  justification           String                                 @db.Text
+  supporting_doc_ref      String?                                @db.VarChar(500)
+  confirmed_by_human      Boolean                                @default(false)
+  confirmed_by            Int?
+  confirmed_at            DateTime?                              @db.DateTime(0)
+  valid_from              DateTime                               @db.Date
+  valid_until             DateTime?                              @db.Date
+  created_at              DateTime                               @default(now()) @db.Timestamp(0)
+  rdi_expense_allocations rdi_expense_allocations[]
+  companies               companies                              @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_overhead_company")
+  contacts                contacts?                              @relation(fields: [confirmed_by], references: [id], onUpdate: NoAction, map: "fk_overhead_confirmer")
+
+  @@index([confirmed_by], map: "fk_overhead_confirmer")
+  @@index([company_id], map: "idx_overhead_company")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_project_annual_snapshots {
+  id                      Int                                             @id @default(autoincrement())
+  project_id              Int
+  base_year               Int                                             @db.SmallInt
+  narrative_for_year      String?                                         @db.Text
+  objectives_achieved     String?                                         @db.Text
+  eligibility_status      rdi_project_annual_snapshots_eligibility_status @default(NAO_AVALIADO)
+  eligibility_notes       String?                                         @db.Text
+  computed_rh_amount      Decimal                                         @default(0.00) @db.Decimal(18, 2)
+  computed_expense_amount Decimal                                         @default(0.00) @db.Decimal(18, 2)
+  computed_total_eligible Decimal                                         @default(0.00) @db.Decimal(18, 2)
+  total_researcher_hours  Decimal                                         @default(0.00) @db.Decimal(10, 2)
+  researcher_count        Int                                             @default(0)
+  is_continuous_year      Boolean                                         @default(false)
+  continuous_start_year   Int?                                            @db.SmallInt
+  snapshot_status         rdi_project_annual_snapshots_snapshot_status    @default(ABERTO)
+  closed_at               DateTime?                                       @db.DateTime(0)
+  closed_by               Int?
+  created_at              DateTime                                        @default(now()) @db.Timestamp(0)
+  updated_at              DateTime                                        @default(now()) @db.DateTime(0)
+  formpd_project_mapping  formpd_project_mapping[]
+  rdi_expense_allocations rdi_expense_allocations[]
+  rdi_hr_allocations      rdi_hr_allocations[]
+  contacts                contacts?                                       @relation(fields: [closed_by], references: [id], onUpdate: NoAction, map: "fk_snapshot_closer")
+  rdi_projects            rdi_projects                                    @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_snapshot_project")
+
+  @@unique([project_id, base_year], map: "uq_snapshot_project_year")
+  @@index([closed_by], map: "fk_snapshot_closer")
+  @@index([base_year], map: "idx_snapshot_year")
+}
+
+model rdi_project_documents {
+  id             Int                            @id @default(autoincrement())
+  project_id     Int
+  doc_type       rdi_project_documents_doc_type
+  title          String                         @db.VarChar(500)
+  reference_date DateTime?                      @db.Date
+  s3_key         String?                        @db.VarChar(500)
+  uploaded_by    Int?
+  created_at     DateTime                       @default(now()) @db.Timestamp(0)
+  rdi_projects   rdi_projects                   @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_proj_docs_project")
+  contacts       contacts?                      @relation(fields: [uploaded_by], references: [id], onUpdate: NoAction, map: "fk_proj_docs_uploader")
+
+  @@index([uploaded_by], map: "fk_proj_docs_uploader")
+  @@index([project_id], map: "idx_proj_docs_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_projects {
+  id                           Int                             @id @default(autoincrement())
+  company_id                   Int
+  owner_contact_id             Int?
+  code                         String?                         @db.VarChar(50)
+  title                        String                          @db.VarChar(500)
+  objective                    String?                         @db.Text
+  category                     rdi_projects_category           @default(DESENVOLVIMENTO_EXPERIMENTAL)
+  eligibility_status           rdi_projects_eligibility_status @default(NAO_AVALIADO)
+  eligibility_notes            String?                         @db.Text
+  start_date                   DateTime?                       @db.Date
+  end_date                     DateTime?                       @db.Date
+  is_continuous                Boolean                         @default(false)
+  project_status               rdi_projects_project_status     @default(PLANEJAMENTO)
+  created_at                   DateTime                        @default(now()) @db.Timestamp(0)
+  updated_at                   DateTime                        @default(now()) @db.DateTime(0)
+  formpd_project_mapping       formpd_project_mapping[]
+  rdi_expense_allocations      rdi_expense_allocations[]
+  rdi_hr_allocations           rdi_hr_allocations[]
+  rdi_project_annual_snapshots rdi_project_annual_snapshots[]
+  rdi_project_documents        rdi_project_documents[]
+  companies                    companies                       @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_rdi_proj_company")
+  contacts                     contacts?                       @relation(fields: [owner_contact_id], references: [id], onUpdate: NoAction, map: "fk_rdi_proj_owner")
+  rdi_timesheet_entries        rdi_timesheet_entries[]
+
+  @@index([owner_contact_id], map: "fk_rdi_proj_owner")
+  @@index([company_id], map: "idx_rdi_projects_company_year")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rdi_timesheet_entries {
+  id                   Int                          @id @default(autoincrement())
+  company_id           Int
+  contact_id           Int
+  project_id           Int
+  entry_date           DateTime                     @db.Date
+  hours                Decimal                      @db.Decimal(5, 2)
+  activity_desc        String?                      @db.VarChar(500)
+  source_system        String?                      @db.VarChar(100)
+  source_ref           String?                      @db.VarChar(200)
+  import_job_id        Int?
+  status               rdi_timesheet_entries_status @default(IMPORTADO)
+  linked_allocation_id Int?
+  created_at           DateTime                     @default(now()) @db.Timestamp(0)
+  rdi_hr_allocations   rdi_hr_allocations?          @relation(fields: [linked_allocation_id], references: [id], onUpdate: NoAction, map: "fk_ts_entry_alloc")
+  companies            companies                    @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_ts_entry_company")
+  contacts             contacts                     @relation(fields: [contact_id], references: [id], onUpdate: NoAction, map: "fk_ts_entry_contact")
+  rdi_projects         rdi_projects                 @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_ts_entry_project")
+
+  @@index([linked_allocation_id], map: "fk_ts_entry_alloc")
+  @@index([company_id], map: "idx_ts_entries_company")
+  @@index([contact_id], map: "idx_ts_entries_contact")
+  @@index([entry_date], map: "idx_ts_entries_date")
+  @@index([project_id], map: "idx_ts_entries_project")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_company_access {
+  id                                          Int                             @id @default(autoincrement())
+  user_id                                     Int
+  company_id                                  Int
+  access_role                                 user_company_access_access_role @default(VIEWER)
+  granted_by                                  Int?
+  granted_at                                  DateTime                        @default(now()) @db.DateTime(0)
+  expires_at                                  DateTime?                       @db.DateTime(0)
+  is_active                                   Boolean                         @default(true)
+  companies                                   companies                       @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_access_company")
+  users_user_company_access_granted_byTousers users?                          @relation("user_company_access_granted_byTousers", fields: [granted_by], references: [id], onUpdate: NoAction, map: "fk_access_granter")
+  users_user_company_access_user_idTousers    users                           @relation("user_company_access_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_access_user")
+
+  @@unique([user_id, company_id], map: "uq_user_company")
+  @@index([granted_by], map: "fk_access_granter")
+  @@index([company_id], map: "idx_access_company")
+}
+
+enum system_role {
+  ADMIN
+  MANAGER
+  ANALYST
+  VIEWER
+}
+
+enum phone_type {
+  CELULAR
+  FIXO
+  WHATSAPP
+  OUTRO
+}
+
+enum obligation_calendar_obligation_type {
+  FORMPD
+  ECD
+  ECF
+  DIRBI
+}
+
+enum formpd_project_equipment_origin {
+  NACIONAL
+  IMPORTADO
+}
+
+enum formpd_project_expenses_expense_category {
+  SERVICO_APOIO_PF
+  SERVICO_APOIO_PJ
+  MATERIAL_CONSUMO
+  TIB
+  DESPESA_OPERACIONAL
+}
+
+enum formpd_project_partners_partner_type {
+  EMPRESA_COOPERADORA
+  EMPRESA_COMPARTILHOU_CUSTOS
+  UNIVERSIDADE_ICT
+  INVENTOR_INDEPENDENTE
+  MICRO_EPP
+}
+
+enum formpd_project_patents_asset_type {
+  PATENTE
+  MODELO_UTILIDADE
+  DESENHO_INDUSTRIAL
+  MARCA
+  SOFTWARE
+  OUTRO_INTANGIVEL
+}
+
+enum obligation_calendar_competence_period {
+  MENSAL
+  ANUAL
+}
+
+enum payroll_import_column_maps_target_field {
+  COLLABORATOR_CPF
+  COLLABORATOR_MATRICULA
+  COLLABORATOR_NAME
+  COMPETENCE_YEAR
+  COMPETENCE_MONTH
+  COMPETENCE_DATE
+  SHEET_TYPE
+  RUBRIC_CODE
+  RUBRIC_DESCRIPTION
+  RUBRIC_TYPE
+  RUBRIC_REFERENCE_VALUE
+  RUBRIC_REFERENCE_UNIT
+  RUBRIC_AMOUNT
+  GROSS_AMOUNT
+  NET_AMOUNT
+  INSS_PATRONAL
+  FGTS
+  OUTROS_ENCARGOS
+}
+
+enum rdi_expense_documents_doc_type {
+  NFE
+  NFSE
+  CONTRATO
+  RECIBO
+  FOLHA_PAGAMENTO
+  OUTRO
+}
+
+enum rdi_project_documents_doc_type {
+  RELATORIO_TECNICO
+  ATA_REUNIAO
+  REGISTRO_LAB
+  PUBLICACAO
+  PATENTE_DEPOSITO
+  FOTO_PROTOTIPO
+  PLANILHA_HORAS
+  OUTRO
+}
+
+enum tax_regregimes_type {
+  SIMPLES
+  SIMEI
+  LUCRO_REAL
+  LUCRO_PRESUMIDO
+  ARBITRADO
+}
+
+enum formpd_form_representatives_profile_type {
+  REPRESENTANTE_CORPORATIVO
+  RESPONSAVEL_PREENCHIMENTO
+}
+
+enum formpd_forms_status {
+  NAO_PREENCHIDO
+  EM_PREENCHIMENTO
+  FINALIZADO
+  SUBMETIDO
+}
+
+enum formpd_opinions_opinion_type {
+  APROVADO
+  GLOSADO
+  APROVADO_PARCIAL
+  EM_ANALISE
+}
+
+enum payroll_import_template_versions_file_type {
+  XLS
+  XLSX
+  CSV
+  PDF
+}
+
+enum payroll_import_templates_source_type {
+  EXCEL
+  CSV
+  PDF_ESTRUTURADO
+  PDF_OCR
+  API
+}
+
+enum rdi_overhead_rates_overhead_type {
+  ALUGUEL_LABORATORIO
+  ENERGIA_ELETRICA
+  AGUA_SANEAMENTO
+  MANUTENCAO_INSTALACOES
+  COMUNICACAO_INTERNET
+  SEGURO_LABORATORIO
+  LIMPEZA_CONSERVACAO
+  OUTROS_OVERHEAD
+}
+
+enum user_company_access_access_role {
+  OWNER
+  CONSULTANT
+  ANALYST
+  VIEWER
+}
+
+enum ecf_lalur_entries_entry_type {
+  EXCLUSAO_IRPJ
+  EXCLUSAO_CSLL
+}
+
+enum payroll_rubric_catalog_rubric_type {
+  PROVENTO
+  DESCONTO
+  ENCARGO_PATRONAL
+  INFORMATIVO
+}
+
+enum rdi_assets_asset_type {
+  EQUIPAMENTO_NACIONAL
+  EQUIPAMENTO_IMPORTADO
+  SOFTWARE
+  LICENCA_TECNOLOGIA
+  PATENTE
+  OUTRO_INTANGIVEL
+}
+
+enum rdi_overhead_rates_apportionment_basis {
+  PERCENTUAL_FIXO
+  AREA_M2
+  HORAS_PDI
+  HEADCOUNT_PDI
+  CONSUMO_MEDIDO
+}
+
+enum company_obligations_status {
+  PENDENTE
+  EM_PREPARACAO
+  ENVIADO
+  CONFIRMADO
+  ATRASADO
+}
+
+enum dirbi_monthly_records_status {
+  PENDENTE
+  GERADO
+  TRANSMITIDO
+}
+
+enum payroll_import_jobs_input_method {
+  UPLOAD_EXCEL
+  UPLOAD_CSV
+  UPLOAD_PDF_TEMPLATE
+  UPLOAD_PDF_OCR_IA
+  API_PUSH
+}
+
+enum payroll_rubric_catalog_nature {
+  SALARIO_BASE
+  HORA_EXTRA
+  ADICIONAL_NOTURNO
+  ADICIONAL_PERICULOSIDADE
+  ADICIONAL_INSALUBRIDADE
+  DECIMO_TERCEIRO
+  FERIAS
+  DSR
+  PLR
+  BONUS
+  COMISSAO
+  INSS_EMPREGADO
+  IRRF
+  INSS_PATRONAL
+  FGTS
+  RAT_SAT
+  TERCEIROS
+  VALE_TRANSPORTE
+  VALE_REFEICAO
+  PLANO_SAUDE
+  ADIANTAMENTO
+  EMPRESTIMO
+  OUTRO_PROVENTO
+  OUTRO_DESCONTO
+  OUTRO_ENCARGO
+}
+
+enum payroll_rubric_maps_match_strategy {
+  CODE_EXACT
+  DESC_EXACT
+  DESC_LIKE
+  DESC_REGEX
+  AI_SUGGESTED
+}
+
+enum payroll_sheet_items_rubric_type {
+  PROVENTO
+  DESCONTO
+  ENCARGO_PATRONAL
+  INFORMATIVO
+}
+
+enum payroll_sheets_sheet_type {
+  MENSAL
+  DECIMO_TERCEIRO_1PARCELA
+  DECIMO_TERCEIRO_2PARCELA
+  FERIAS
+  RESCISAO
+  COMPLEMENTAR
+}
+
+enum rdi_assets_usage_type {
+  EXCLUSIVO_PDI
+  MISTO
+  NAO_PDI
+}
+
+enum rdi_project_annual_snapshots_eligibility_status {
+  NAO_AVALIADO
+  ELEGIVEL
+  PARCIALMENTE_ELEGIVEL
+  INELEGIVEL
+}
+
+enum payroll_import_jobs_job_status {
+  AGUARDANDO
+  PROCESSANDO
+  PENDENTE_REVISAO
+  APROVADO
+  PROMOVIDO
+  ERRO
+  CANCELADO
+}
+
+enum rdi_expense_allocations_appropriation_type {
+  DIRETO
+  RATEIO_PERCENTUAL
+  RATEIO_M2
+  RATEIO_HORAS
+  RATEIO_HEADCOUNT
+  DEPRECIACAO_INTEGRAL
+  DEPRECIACAO_PROPORCIONAL
+  AMORTIZACAO_INTANGIVEL
+}
+
+enum rdi_projects_category {
+  PESQUISA_BASICA
+  PESQUISA_APLICADA
+  DESENVOLVIMENTO_EXPERIMENTAL
+  INOVACAO_TECNOLOGICA
+}
+
+enum formpd_forms_submission_status {
+  PENDENTE
+  EM_ANALISE
+  ANALISADO
+  ENCERRADO
+}
+
+enum formpd_opinions_status {
+  PENDENTE_CIENCIA
+  CIENTE
+  PRAZO_CONTESTACAO_ABERTO
+  PRAZO_CONTESTACAO_ENCERRADO
+  ENCERRADO
+}
+
+enum payroll_import_column_maps_value_transform {
+  NONE
+  DATE_MMYYYY
+  DATE_YYYY_MM
+  MONTH_NAME_PT
+  UPPER
+  TRIM
+}
+
+enum payroll_import_staging_rows_sheet_type {
+  MENSAL
+  DECIMO_TERCEIRO_1PARCELA
+  DECIMO_TERCEIRO_2PARCELA
+  FERIAS
+  RESCISAO
+  COMPLEMENTAR
+}
+
+enum rdi_asset_depreciation_entries_entry_type {
+  NORMAL
+  ACELERADA_INTEGRAL
+  ACELERADA_PDI
+}
+
+enum rdi_projects_eligibility_status {
+  NAO_AVALIADO
+  ELEGIVEL
+  PARCIALMENTE_ELEGIVEL
+  INELEGIVEL
+}
+
+enum payroll_import_template_versions_sheet_identifier_strategy {
+  NOME_ABA
+  COLUNA_CPF
+  COLUNA_MATRICULA
+  COLUNA_NOME
+  PRIMEIRA_COLUNA_TEXTO
+  OCR_CAMPO_NOMEADO
+}
+
+enum collaborators_employment_type {
+  CLT
+  CLT_APRENDIZ
+  ESTAGIARIO
+  PJ
+  BOLSISTA
+  SOCIO
+}
+
+enum payroll_import_staging_items_item_status {
+  MAPEADO
+  PENDENTE_MAPEAMENTO
+  IGNORADO
+  ERRO
+}
+
+enum rdi_expense_allocations_expense_category {
+  RH_CLT
+  RH_PJ
+  RH_BOLSISTA
+  SERVICO_PF
+  SERVICO_PJ
+  MATERIAL_CONSUMO
+  TIB
+  EQUIPAMENTO_NACIONAL
+  EQUIPAMENTO_IMPORTADO
+  DESPESA_OPERACIONAL
+  OUTRO
+}
+
+enum rdi_hr_allocations_allocation_method {
+  PERCENTUAL_FIXO
+  HORAS_APONTADAS
+  RATEIO_ATIVIDADE
+}
+
+enum rdi_hr_timesheets_status {
+  RASCUNHO
+  APROVADO
+  CONTESTADO
+}
+
+enum collaborators_academic_degree {
+  DOUTOR
+  MESTRE
+  ESPECIALISTA
+  GRADUADO
+  TECNICO
+  ENSINO_MEDIO
+  NAO_INFORMADO
+}
+
+enum payroll_import_staging_rows_row_status {
+  PENDENTE
+  MAPEADO
+  PARCIAL
+  ERRO
+  IGNORADO
+}
+
+enum payroll_sheets_status {
+  IMPORTADO
+  REVISAO
+  APROVADO
+  BLOQUEADO
+}
+
+enum rdi_timesheet_entries_status {
+  IMPORTADO
+  VALIDADO
+  VINCULADO_FOLHA
+  REJEITADO
+}
+
+enum rdi_assets_depreciation_method {
+  LINEAR
+  ACELERADA_INTEGRAL
+  ACELERADA_PDI
+}
+
+enum rdi_projects_project_status {
+  PLANEJAMENTO
+  EM_EXECUCAO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum formpd_opinions_contest_status {
+  NAO_CONTESTADO
+  AGUARDANDO_RESPOSTA
+  DEFERIDO
+  INDEFERIDO
+  DEFERIDO_PARCIAL
+}
+
+enum formpd_projects_project_status {
+  RASCUNHO
+  COMPLETO
+}
+
+enum rdi_project_annual_snapshots_snapshot_status {
+  ABERTO
+  EM_REVISAO
+  FECHADO
+}
+
+enum rdi_assets_rdi_usage_basis {
+  DECLARACAO
+  HORAS_APURADAS
+  AREA_M2
+  MEDICAO_DIRETA
+}
+
+enum formpd_opinions_appeal_status {
+  NAO_RECORRIDO
+  AGUARDANDO
+  DEFERIDO
+  INDEFERIDO
+}
+
+enum rdi_assets_status {
+  ATIVO
+  DEPRECIADO_TOTALMENTE
+  BAIXADO
+  VENDIDO
+}

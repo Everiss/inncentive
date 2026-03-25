@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inncentive — Mapa Completo do Sistema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d0d0b;--surface:#141412;--s2:#1a1a17;--s3:#202020;
+  --b:rgba(255,255,255,0.06);--bm:rgba(255,255,255,0.10);--bs:rgba(255,255,255,0.18);
+  --text:#e8e5dc;--muted:#8a8778;--faint:#4a4940;
+  --acc:#c8f060;--acc-d:rgba(200,240,96,0.10);--acc-b:rgba(200,240,96,0.28);
+  --blue:#60b4f0;--blue-d:rgba(96,180,240,0.10);--blue-b:rgba(96,180,240,0.28);
+  --amber:#f0c060;--amb-d:rgba(240,192,96,0.10);--amb-b:rgba(240,192,96,0.28);
+  --coral:#f07860;--cor-d:rgba(240,120,96,0.10);--cor-b:rgba(240,120,96,0.28);
+  --purple:#a890f0;--pur-d:rgba(168,144,240,0.10);--pur-b:rgba(168,144,240,0.28);
+  --teal:#60e0b4;--tea-d:rgba(96,224,180,0.10);--tea-b:rgba(96,224,180,0.28);
+  --pink:#f060b4;--pnk-d:rgba(240,96,180,0.10);--pnk-b:rgba(240,96,180,0.28);
+  --sans:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+  --r:10px;--rl:14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;line-height:1.6;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--bm);border-radius:2px;}
+
+/* HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:0.5px solid var(--bm);background:var(--surface);position:sticky;top:0;z-index:200;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-sq{width:30px;height:30px;border-radius:7px;background:var(--acc);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-sq svg{width:16px;height:16px;}
+.logo-name{font-size:14px;font-weight:600;letter-spacing:-.02em;}
+.logo-sep{color:var(--faint);margin:0 4px;font-weight:300;}
+.logo-sub{font-family:var(--mono);font-size:10px;color:var(--muted);}
+.hdr-pills{display:flex;gap:6px;}
+.hpill{font-family:var(--mono);font-size:9px;padding:3px 9px;border-radius:20px;letter-spacing:.04em;}
+.pill-acc{color:var(--acc);background:var(--acc-d);border:0.5px solid var(--acc-b);}
+.pill-muted{color:var(--muted);background:var(--s2);border:0.5px solid var(--b);}
+
+/* LAYOUT */
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 53px);}
+
+/* SIDEBAR */
+.sidebar{border-right:0.5px solid var(--bm);background:var(--surface);padding:16px 0 60px;position:sticky;top:53px;height:calc(100vh - 53px);overflow-y:auto;}
+.sb-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;padding:0 18px 6px;margin-top:16px;}
+.sb-label:first-child{margin-top:0;}
+.nav{display:flex;align-items:center;gap:9px;padding:7px 18px;cursor:pointer;border-left:2px solid transparent;font-size:12px;color:var(--muted);transition:all .12s;user-select:none;}
+.nav:hover{color:var(--text);background:var(--s2);}
+.nav.on{color:var(--text);font-weight:500;border-left-color:var(--acc);background:rgba(200,240,96,0.04);}
+.nav-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.nav-badge{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--faint);}
+.sb-sep{height:0.5px;background:var(--b);margin:10px 18px;}
+
+/* MAIN */
+.main{padding:32px 40px 80px;max-width:920px;}
+.sec{display:none;}.sec.on{display:block;}
+
+/* PAGE HERO */
+.hero{margin-bottom:28px;}
+.hero-title{font-size:20px;font-weight:600;letter-spacing:-.025em;margin-bottom:5px;line-height:1.2;}
+.hero-title .acc{color:var(--acc);}
+.hero-desc{font-size:12px;color:var(--muted);line-height:1.65;max-width:560px;}
+
+/* OVERVIEW GRID */
+.ov-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px;}
+.ov-card{border-radius:var(--rl);padding:13px 14px;cursor:pointer;border:0.5px solid transparent;transition:all .15s;position:relative;overflow:hidden;}
+.ov-card::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .15s;background:rgba(255,255,255,0.03);}
+.ov-card:hover::before{opacity:1;}
+.ov-card:hover{transform:translateY(-1px);}
+.ov-num{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.06em;margin-bottom:4px;}
+.ov-name{font-size:12px;font-weight:500;margin-bottom:2px;}
+.ov-sub{font-size:10px;line-height:1.5;opacity:.75;}
+.ov-ai-badge{display:inline-block;margin-top:6px;font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:8px;background:var(--acc-d);color:var(--acc);border:0.5px solid var(--acc-b);}
+
+/* FLOW STRIP */
+.flow-strip{display:flex;align-items:center;gap:0;overflow-x:auto;padding:14px 0 6px;margin-bottom:22px;scrollbar-width:none;}
+.flow-strip::-webkit-scrollbar{display:none;}
+.fn{flex-shrink:0;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;border:0.5px solid transparent;transition:opacity .12s;font-family:var(--mono);}
+.fn:hover{opacity:.75;}
+.fa{flex-shrink:0;padding:0 5px;color:var(--faint);font-size:11px;}
+
+/* MODULE STEPS */
+.mod-header{display:flex;align-items:flex-start;gap:11px;margin-bottom:22px;padding-bottom:18px;border-bottom:0.5px solid var(--b);}
+.mod-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:500;white-space:nowrap;flex-shrink:0;margin-top:2px;}
+.mod-title{font-size:18px;font-weight:600;letter-spacing:-.02em;margin-bottom:3px;}
+.mod-sub{font-size:12px;color:var(--muted);line-height:1.5;}
+
+.steps-grid{display:flex;flex-direction:column;gap:0;}
+.step-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:0;}
+.step{background:var(--surface);border:0.5px solid var(--bm);border-radius:var(--rl);padding:13px 15px;cursor:pointer;transition:all .12s;}
+.step:hover{border-color:var(--bs);background:var(--s2);}
+.step.open{border-color:var(--bs);background:var(--s2);}
+.step-idx{font-family:var(--mono);font-size:9px;color:var(--faint);margin-bottom:4px;letter-spacing:.04em;}
+.step-title{font-size:12px;font-weight:500;margin-bottom:3px;}
+.step-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+.step-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px;}
+.sbadge{display:inline-block;padding:2px 7px;border-radius:7px;font-family:var(--mono);font-size:9px;font-weight:500;}
+.b-import{background:var(--pur-d);color:var(--purple);border:0.5px solid var(--pur-b);}
+.b-manual{background:var(--amb-d);color:var(--amber);border:0.5px solid var(--amb-b);}
+.b-auto{background:var(--tea-d);color:var(--teal);border:0.5px solid var(--tea-b);}
+.b-calc{background:var(--blue-d);color:var(--blue);border:0.5px solid var(--blue-b);}
+.b-output{background:var(--cor-d);color:var(--coral);border:0.5px solid var(--cor-b);}
+.b-monitor{background:var(--pnk-d);color:var(--pink);border:0.5px solid var(--pnk-b);}
+.b-ai{background:var(--acc-d);color:var(--acc);border:0.5px solid var(--acc-b);}
+
+/* DRAWER */
+.drawer{background:var(--s2);border:0.5px solid var(--bm);border-radius:var(--rl);padding:14px 16px;margin:6px 0 4px;display:none;}
+.drawer.open{display:block;}
+.drw-head{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;}
+.drw-props{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px;}
+.drw-prop{background:var(--surface);border-radius:var(--r);padding:8px 10px;border:0.5px solid var(--b);}
+.dp-k{font-family:var(--mono);font-size:9px;color:var(--faint);margin-bottom:2px;letter-spacing:.03em;}
+.dp-v{font-size:11px;color:var(--text);line-height:1.45;}
+.drw-sec{margin-top:10px;}
+.drw-sec-label{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px;}
+.tags{display:flex;flex-wrap:wrap;gap:4px;}
+.tag{display:inline-block;padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:9px;background:var(--s3);border:0.5px solid var(--bm);color:var(--muted);}
+.tag.ai-tag{background:var(--acc-d);color:var(--acc);border-color:var(--acc-b);}
+.dep-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);padding:3px 0;}
+.dep-item::before{content:'→';font-size:9px;color:var(--faint);}
+.code-blk{background:var(--bg);border:0.5px solid var(--b);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.7;white-space:pre;overflow-x:auto;margin-top:6px;}
+.code-blk .kw{color:var(--blue);}
+.code-blk .str{color:var(--acc);}
+.code-blk .cm{color:var(--faint);}
+.code-blk .fn{color:var(--amber);}
+
+/* FOOTER */
+.pg-footer{margin-top:36px;padding-top:16px;border-top:0.5px solid var(--b);font-family:var(--mono);font-size:10px;color:var(--faint);line-height:1.8;}
+
+/* AI SECTION SPECIFIC */
+.ai-uc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.ai-uc{background:var(--surface);border:0.5px solid var(--bm);border-radius:var(--rl);padding:13px 15px;cursor:pointer;transition:all .12s;}
+.ai-uc:hover,.ai-uc.open{border-color:var(--acc-b);background:var(--s2);}
+.ai-model-badge{margin-top:7px;font-family:var(--mono);font-size:9px;color:var(--acc);}
+
+/* ARCH ROWS */
+.arch-row{background:var(--surface);border:0.5px solid var(--bm);border-radius:var(--rl);padding:12px 14px;margin-bottom:8px;}
+.arch-row.ai-layer{border-color:var(--acc-b);background:rgba(200,240,96,0.04);}
+.arch-row-head{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;}
+.arch-items{display:flex;flex-direction:column;gap:3px;}
+.arch-item{font-size:11px;color:var(--muted);padding:3px 0;border-bottom:0.5px solid var(--b);}
+.arch-item:last-child{border-bottom:none;}
+.arch-item b{color:var(--text);font-weight:500;}
+
+/* MODEL CARDS */
+.model-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px;}
+.model-card{background:var(--surface);border:0.5px solid var(--bm);border-radius:var(--rl);padding:13px;}
+.model-name{font-family:var(--mono);font-size:11px;font-weight:500;margin-bottom:3px;}
+.model-role{font-size:11px;color:var(--muted);margin-bottom:9px;line-height:1.45;}
+.model-caps{display:flex;flex-direction:column;gap:3px;}
+.model-cap{font-size:10px;color:var(--muted);}
+.model-cap::before{content:'· ';color:var(--faint);}
+
+/* AI GOVERN BOX */
+.gov-box{background:var(--s2);border:0.5px solid var(--acc-b);border-radius:var(--rl);padding:14px 16px;margin-top:14px;}
+.gov-title{font-family:var(--mono);font-size:9px;color:var(--acc);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;}
+.gov-text{font-size:11px;color:var(--muted);line-height:1.7;}
+.gov-text code{font-family:var(--mono);font-size:10px;color:var(--acc);background:var(--acc-d);padding:1px 5px;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="logo">
+    <div class="logo-sq">
+      <svg viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="2" width="5" height="5" rx="1" fill="#0d0d0b"/>
+        <rect x="9" y="2" width="5" height="5" rx="1" fill="#0d0d0b" opacity=".7"/>
+        <rect x="2" y="9" width="5" height="5" rx="1" fill="#0d0d0b" opacity=".7"/>
+        <rect x="9" y="9" width="5" height="5" rx="1" fill="#0d0d0b" opacity=".3"/>
+      </svg>
+    </div>
+    <span class="logo-name">Inncentive</span>
+    <span class="logo-sep">×</span>
+    <span class="logo-sub">Mapa completo do sistema</span>
+  </div>
+  <div class="hdr-pills">
+    <span class="hpill pill-acc">Claude API</span>
+    <span class="hpill pill-muted">Lei nº 11.196/2005</span>
+    <span class="hpill pill-muted">FORMP&D 2025</span>
+  </div>
+</header>
+
+<div class="shell">
+<nav class="sidebar" id="sidebar">
+  <div class="sb-label">Visão Geral</div>
+  <div class="nav on" data-sec="overview" onclick="goSec('overview',this)">
+    <div class="nav-dot" style="background:#888"></div>
+    Mapa completo
+    <span class="nav-badge">—</span>
+  </div>
+
+  <div class="sb-sep"></div>
+  <div class="sb-label">Módulos do sistema</div>
+</nav>
+
+<main class="main" id="main">
+  <section class="sec on" id="sec-overview">
+    <div class="hero">
+      <div class="hero-title">Mapa completo — <span class="acc">Inncentive</span></div>
+      <div class="hero-desc">Todos os módulos operacionais integrados à camada de IA Claude. Selecione um módulo para ver o passo a passo, tabelas do schema e integração com a API Anthropic.</div>
+    </div>
+    <div class="flow-strip" id="flow-strip"></div>
+    <div class="ov-grid" id="ov-grid"></div>
+  </section>
+</main>
+</div>
+
+<script>
+const C = {
+  m1:{c:'var(--purple)',d:'var(--pur-d)',b:'var(--pur-b)'},
+  m2:{c:'var(--teal)',d:'var(--tea-d)',b:'var(--tea-b)'},
+  m3:{c:'var(--amber)',d:'var(--amb-d)',b:'var(--amb-b)'},
+  m4:{c:'var(--blue)',d:'var(--blue-d)',b:'var(--blue-b)'},
+  m5:{c:'#aaa',d:'rgba(170,170,170,0.08)',b:'rgba(170,170,170,0.2)'},
+  m6:{c:'var(--coral)',d:'var(--cor-d)',b:'var(--cor-b)'},
+  m7:{c:'var(--pink)',d:'var(--pnk-d)',b:'var(--pnk-b)'},
+  m8:{c:'var(--acc)',d:'var(--acc-d)',b:'var(--acc-b)'},
+};
+
+const MODULES = [
+  {
+    id:'m1', num:'M1', label:'Cadastro', ck:'m1',
+    title:'Cadastro e configuração de empresa',
+    sub:'Dados cadastrais, regime tributário, acesso multi-empresa e configurações anuais',
+    aiNote:null,
+    steps:[
+      {t:'Cadastro da empresa',d:'CNPJ, razão social, porte, natureza jurídica, regime tributário (Lucro Real obrigatório), situação Receita Federal.',badges:['import'],
+       props:{Fonte:'Receita Federal API / manual',Obrigatoriedade:'CNPJ + regime antes de tudo',Validação:'Lucro Real para elegibilidade Lei do Bem','Próximo passo':'Configurar acesso de usuários'},
+       tables:['companies','tax_regregimes','addresses','company_cnaes'],deps:[]},
+      {t:'Controle de acesso multi-empresa',d:'Vincula usuários (consultores ou clientes) à empresa com papel controlado: Owner, Consultant, Analyst, Viewer.',badges:['manual'],
+       props:{Tabela:'user_company_access (nova)',Papéis:'Owner, Consultant, Analyst, Viewer',Multi:'1 consultor → N empresas',Auditoria:'Ações rastreadas por user_id'},
+       tables:['user_company_access','users','contacts'],deps:['Empresa cadastrada']},
+      {t:'Catálogo de rubricas da folha',d:'Define rubricas do sistema de RH com elegibilidade Lei do Bem. Pode ser configurado manualmente ou importado — IA sugere classificação.',badges:['import','ai'],
+       props:{Elegibilidade:'1=elegível, 0=inelegível, NULL=avaliar',Mapeamento:'Código RH → rubrica interna',IA:'Sugestão com confirmed_by_human=0',Versionamento:'valid_from protege histórico'},
+       tables:['payroll_rubric_catalog','payroll_rubric_maps'],deps:['Empresa cadastrada'],
+       ai:{modelo:'claude-haiku-4-5',cap:'Batch API · tool use',custo:'50% off via Message Batches',code:`anthropic.beta.messages.batches.create({
+  requests: rubricas.map(r => ({
+    custom_id: \`rubric-\${r.id}\`,
+    params: {
+      model: "claude-haiku-4-5",
+      max_tokens: 512,
+      tools: [eligibilityTool],
+      messages: [{ role:"user",
+        content: \`Rubrica: \${r.code} — \${r.desc}
+Avalie elegibilidade para Lei do Bem.\`
+      }]
+    }
+  }))
+});\nresultado → confirmed_by_human = 0`}},
+      {t:'Configurações anuais do exercício',d:'Alíquotas patronais, taxas de depreciação, critérios de rateio overhead, base m². Versionado por exercício fiscal.',badges:['manual'],
+       props:{Periodicidade:'1 config por exercício fiscal',Rateio:'m², horas, headcount, medição direta',Vigência:'valid_from / valid_until',Impacto:'Alimenta todos os cálculos de dispêndio'},
+       tables:['rdi_overhead_rates','company_fiscal_year_config'],deps:['Empresa cadastrada']},
+    ]
+  },
+  {
+    id:'m2', num:'M2', label:'Entidades', ck:'m2',
+    title:'Colaboradores, projetos e ativos PD&I',
+    sub:'Importação de pessoas, projetos e equipamentos com rastreabilidade desde o cadastro',
+    aiNote:null,
+    steps:[
+      {t:'Importar colaboradores CLT',d:'Importação em batch ou manual. Employment type, titulação acadêmica e flag de pesquisador obrigatórios para o FORMP&D.',badges:['import'],
+       props:{Campos:'employment_type, academic_degree, is_researcher',Vínculo:'Colaborador pode existir sem ser usuário',Dedup:'CPF como chave primária',Engine:'Migrar collaborators para InnoDB'},
+       tables:['collaborators','contacts','contact_companies'],deps:['Empresa cadastrada','Acesso configurado']},
+      {t:'Cadastrar projetos PD&I',d:'Projetos internos sem vínculo com ano-base. Plurianuais por design. Categoria define alíquota de exclusão: Básica 80%, Aplicada 70%, Experimental 60%.',badges:['manual'],
+       props:{'Sem base_year':'Corte anual feito no snapshot',Categoria:'Define alíquota de exclusão LALUR',Obrigatório:'Objetivo tecnológico para FORMP&D',Plurianual:'is_continuous + continuous_start_year'},
+       tables:['rdi_projects'],deps:['Empresa cadastrada']},
+      {t:'Registrar ativos PD&I',d:'Equipamentos e intangíveis com método de depreciação e % de uso em PD&I. Exclusivos: depreciação acelerada integral Art. 17 III.',badges:['manual','ai'],
+       props:{Exclusivo:'Depreciação integral Art. 17 III',Misto:'Cota proporcional × % uso PD&I',NF:'Documento de aquisição vinculado',Justificativa:'Obrigatória para uso misto'},
+       tables:['rdi_assets'],deps:['Empresa cadastrada'],
+       ai:{modelo:'claude-haiku-4-5',cap:'Vision + tool use',custo:'Classificação de NF-e por imagem ou XML',code:`// Saída esperada (tool schema)
+{
+  "asset_type": "EQUIPAMENTO_NACIONAL",
+  "usage_type": "EXCLUSIVO_PDI",
+  "depreciation_method": "ACELERADA_INTEGRAL",
+  "useful_life_years": 5,
+  "is_eligible_rdi": true,
+  "rdi_usage_pct": 100,
+  "justification": "Equipamento de laboratório —
+    uso exclusivo Art. 17 III Lei 11.196/2005",
+  "confidence": "alta"
+}\n→ rdi_assets (confirmed_by_human = 0)`}},
+    ]
+  },
+  {
+    id:'m3', num:'M3', label:'Financeiro', ck:'m3',
+    title:'Importação financeira e fiscal',
+    sub:'Folha de pagamento, despesas, documentos fiscais e demonstrações contábeis',
+    aiNote:'OCR de PDF com IA — qualquer layout de folha',
+    steps:[
+      {t:'Configurar template de importação de folha',d:'Template por cliente e sistema de RH (Domínio, Totvs, ADP, Senior). Versionado para suportar mudança de layout.',badges:['manual'],
+       props:{Tipos:'EXCEL, CSV, PDF_ESTRUTURADO, PDF_OCR_IA',Versionamento:'valid_from/valid_until por layout',layout_config:'JSON específico por tipo de arquivo',Encoding:'UTF-8, ISO-8859-1, CP1252'},
+       tables:['payroll_import_templates','payroll_import_template_versions','payroll_import_column_maps'],deps:['Empresa cadastrada','Catálogo de rubricas']},
+      {t:'Importar folha via OCR + IA',d:'Upload de PDF sem template configurado. Claude extrai colaborador, competência e todas as rubricas com valores. Staging com validação antes de promover.',badges:['import','ai'],
+       props:{Fluxo:'Upload → Staging → Mapear → Validar → Promover',Bloqueio:'PENDENTE_MAPEAMENTO impede promoção',Competência:'YEAR(competence_date), não data upload',Granularidade:'Uma linha por rubrica em sheet_items'},
+       tables:['payroll_import_jobs','payroll_import_staging_rows','payroll_import_staging_items','payroll_sheets','payroll_sheet_items','payroll_employer_charges'],
+       deps:['Template configurado','Colaboradores importados'],
+       ai:{modelo:'claude-sonnet-4-6',cap:'PDF nativo · prompt caching',custo:'Cache do system prompt reutilizado por empresa',code:`anthropic.messages.create({
+  model: "claude-sonnet-4-6",
+  max_tokens: 4096,
+  messages: [{
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" }
+      },
+      {
+        type: "document",
+        source: { type:"base64",
+          media_type:"application/pdf",
+          data: base64PdfData }
+      }
+    ]
+  }]
+});\n→ payroll_import_staging_items (JSON estruturado)`}},
+      {t:'Importar NFs e contratos de despesa',d:'Documentos de despesa (NF-e, NFS-e, contratos, recibos). Arquivo original preservado no storage. Competência fiscal obrigatória.',badges:['import'],
+       props:{Tipos:'NFE, NFSE, CONTRATO, RECIBO, FOLHA',Preservação:'s3_key — raw nunca descartado',Competência:'competence_date pode diferir da emissão',Subvenção:'Flag FINEP/BNDES para vedação Art. 17 §2º'},
+       tables:['rdi_expense_documents'],deps:['Empresa cadastrada']},
+      {t:'Importar timesheets externos',d:'Registros brutos de horas de sistemas externos (Jira, Toggl, ponto eletrônico, planilha). Cruzados com a folha na alocação.',badges:['import'],
+       props:{Fontes:'Jira, Toggl, ponto, planilha, manual',Granularidade:'Por dia × colaborador × projeto',Evidência:'activity_desc auditável pelo MCTI',Status:'IMPORTADO → VALIDADO → VINCULADO_FOLHA'},
+       tables:['rdi_timesheet_entries'],deps:['Colaboradores importados','Projetos cadastrados']},
+      {t:'Importar demonstrações contábeis',d:'ECD (SPED txt), DRE, Balanço Patrimonial. Módulo independente — não bloqueia apuração PD&I. Habilita geração ECD/ECF.',badges:['import'],
+       props:{Formatos:'SPED ECD txt, XML, Excel/CSV manual',Finalidade:'Cruzamento dispêndios × contabilidade',Expansível:'Não bloqueia fluxo PD&I se ausente',Prazo:'ECD: 31/jul — antes da geração'},
+       tables:['financial_statements','financial_statement_lines'],deps:['Empresa cadastrada','Exercício configurado']},
+    ]
+  },
+  {
+    id:'m4', num:'M4', label:'Apuração', ck:'m4',
+    title:'Apuração do período fiscal',
+    sub:'Elegibilidade, alocação de todos os dispêndios ao projeto e fechamento do snapshot',
+    aiNote:'IA sugere alocações — humano confirma antes de fechar',
+    steps:[
+      {t:'Curadoria de elegibilidade de rubricas',d:'Consultor revisa em lote as rubricas não classificadas. IA sugere com fundamentação jurídica. Confirmação humana obrigatória.',badges:['manual','ai'],
+       props:{Hierarquia:'Override item > catálogo empresa > default',Rastreabilidade:'reviewed_by + reviewed_at obrigatórios',IA:'confirmed_by_human=0 bloqueia uso automático',Fundamentação:'eligibility_legal_basis para MCTI'},
+       tables:['payroll_rubric_catalog','payroll_sheet_items'],deps:['Folha importada e promovida'],
+       ai:{modelo:'claude-haiku-4-5',cap:'Batch API · tool use · structured output',custo:'50% desconto via Message Batches API',code:`// Tool de elegibilidade (structured output)
+const tool = {
+  name: "classify_rubric",
+  input_schema: {
+    type: "object",
+    properties: {
+      is_eligible: { type:"boolean" },
+      eligibility_basis: { type:"string" },
+      confidence: {
+        type:"string",
+        enum:["alta","media","baixa"]
+      }
+    },
+    required: ["is_eligible","eligibility_basis"]
+  }
+};\n→ confirmed_by_human = 0 até revisão`}},
+      {t:'Alocar RH ao projeto (por mês)',d:'Define % dedicação de cada colaborador ao projeto por mês. IA sugere com base nos timesheets e activity_desc. Detalha por rubrica individual.',badges:['calc','ai'],
+       props:{Métodos:'PERCENTUAL_FIXO, HORAS_APONTADAS, RATEIO_ATIVIDADE',Controle:'Soma pct_allocation ≤ 100% enforçada',Granularidade:'Valor por rubrica em allocation_items',Snapshot:'Criado automaticamente se inexistente'},
+       tables:['rdi_hr_allocations','rdi_hr_allocation_items'],deps:['Folha aprovada','Projetos cadastrados','Rubricas classificadas'],
+       ai:{modelo:'claude-haiku-4-5',cap:'Structured output · tool use',custo:'Alto volume → Haiku 4.5 ideal',code:`// Saída estruturada de alocação
+{
+  "allocations": [
+    {
+      "contact_id": 42,
+      "pct_allocation": 65,
+      "justification": "Timesheets: 104h de 160h
+        em atividades de desenvolvimento
+        experimental (Projeto X)",
+      "confidence": "alta"
+    }
+  ]
+}\n→ rdi_hr_allocations (confirmed_by_human=0)`}},
+      {t:'Alocar despesas diretas ao projeto',d:'Aloca NFs e contratos com critério DIRETO (100%) ou RATEIO (m², horas). Deduz subvenção econômica da base elegível (Art. 17 §2º).',badges:['calc'],
+       props:{Tipos:'DIRETO, RATEIO_M2, RATEIO_HORAS, RATEIO_HEADCOUNT',Vedação:'subvention_amount deduzido da base elegível',Justificativa:'Obrigatória para critérios de rateio',Rastreabilidade:'expense_doc_id → allocated_amount → snapshot'},
+       tables:['rdi_expense_allocations'],deps:['NFs importadas','Taxas rateio configuradas']},
+      {t:'Gerar cotas de depreciação',d:'Cálculo automático das cotas mensais por ativo. Exclusivos PD&I: depreciação acelerada integral. Mistos: cota linear × % uso.',badges:['auto'],
+       props:{Exclusivo:'ACELERADA_INTEGRAL — 100% no mês da compra',Misto:'gross_depreciation × rdi_eligible_pct / 100',LALUR:'lalur_ref para cruzamento fiscal',Imutabilidade:'Não editável após snapshot fechado'},
+       tables:['rdi_asset_depreciation_entries'],deps:['Ativos cadastrados']},
+      {t:'Alocar overhead ao projeto',d:'Despesas operacionais (aluguel, energia, limpeza) rateadas por base justificável. Vinculadas à taxa de rateio configurada no M1.',badges:['calc'],
+       props:{Tipos:'ALUGUEL_LAB, ENERGIA, AGUA, MANUTENCAO, COMUNICACAO',Bases:'m², headcount PD&I, horas, medição direta',Justificativa:'Obrigatória — MCTI pode questionar',Documentação:'supporting_doc_ref para laudo ou planta'},
+       tables:['rdi_expense_allocations','rdi_overhead_rates'],deps:['Config anuais com taxas de rateio','NFs overhead importadas']},
+      {t:'Fechar snapshot anual',d:'Consolida todos os dispêndios RH + despesas + depreciação + overhead do ano-base. Após fechamento: imutável. Nenhuma nova alocação aceita.',badges:['calc'],
+       props:{Totais:'computed_rh + computed_expense + computed_total_eligible',Horas:'total_researcher_hours + researcher_count',Imutabilidade:'status=FECHADO bloqueia novas inserções','Pré-req':'Sem staging_items em PENDENTE_MAPEAMENTO'},
+       tables:['rdi_project_annual_snapshots'],deps:['Todas alocações validadas','Nenhum staging pendente']},
+    ]
+  },
+  {
+    id:'m5', num:'M5', label:'Config. Anual', ck:'m5',
+    title:'Configurações anuais e obrigações',
+    sub:'Parâmetros do exercício, LALUR, alíquotas e calendário de obrigações periódicas',
+    aiNote:null,
+    steps:[
+      {t:'Configurar parâmetros do exercício fiscal',d:'Alíquotas IRPJ/CSLL vigentes, limites de exclusão adicional, base de cálculo do benefício, referência ao LALUR. 1 config por ano-base.',badges:['manual'],
+       props:{Base:'Exclusão adicional 60% despesas operacionais','Adicional pesq.':'+ 10% (≤5%) ou + 20% (>5% incremento)','Adicional patente':'+ até 20% com patente INPI concedida',LALUR:'Referência dos lançamentos do livro'},
+       tables:['company_fiscal_year_config'],deps:['Empresa cadastrada']},
+      {t:'Configurar calendário de obrigações',d:'Vencimentos automáticos: SPED ECD, ECF, DIRBI, FORMP&D, DCTF. Alertas configuráveis por empresa. Histórico completo de envios.',badges:['auto'],
+       props:{Calendário:'FORMP&D: 30/set | ECD: 31/jul | ECF: 31/jul | DIRBI: dia 20',Alertas:'Configuráveis: 30, 15, 7 dias',Status:'PENDENTE → EM_PREPARACAO → ENVIADO → CONFIRMADO',Histórico:'Todos os envios por exercício'},
+       tables:['company_obligations','obligation_calendar'],deps:['Empresa cadastrada','Exercício configurado']},
+    ]
+  },
+  {
+    id:'m6', num:'M6', label:'Prestação', ck:'m6',
+    title:'Prestação de contas ao governo',
+    sub:'FORMP&D, ECD, ECF, DIRBI — geração assistida por IA, validação e envio',
+    aiNote:'Claude Opus elabora narrativa FORMP&D + Claude Sonnet cruza ECD',
+    steps:[
+      {t:'Mapear projetos e montar FORMP&D',d:'Mapeia snapshots fechados para projetos FORMP&D. Agrupamento N:1 de projetos internos em atividades PD&I. Claude elabora narrativa técnica.',badges:['output','ai'],
+       props:{Seções:'Identificação → Projetos → Dispêndios → Pesquisadores → Incentivos',Agrupamento:'N projetos internos → 1 atividade FORMP&D',Horas:'Total anual por pesquisador exigido pelo MCTI',Destino:'formpd.mcti.gov.br'},
+       tables:['formpd_forms','formpd_projects','formpd_project_mapping','formpd_form_representatives'],
+       deps:['Snapshots fechados','Projetos mapeados'],
+       ai:{modelo:'claude-opus-4-6',cap:'Extended thinking · long context',custo:'Qualidade máxima — define aprovação vs glosa',code:`anthropic.messages.create({
+  model: "claude-opus-4-6",
+  max_tokens: 8000,
+  thinking: { type:"enabled", budget_tokens:4000 },
+  messages: [{ role:"user",
+    content: \`Redija a seção de descrição do projeto
+para o FORMP&D no padrão MCTI:
+
+Título: \${projeto.title}
+Categoria: \${projeto.category}
+Área tecnológica: \${projeto.tech_area_label}
+Objetivo: \${projeto.objective}
+Dispêndios elegíveis: R$ \${snapshot.total}
+Ano-base: \${snapshot.base_year}
+
+Requisitos MCTI: novidade tecnológica,
+risco/incerteza, sistematização.\`
+  }]
+});\n→ formpd_projects.description`}},
+      {t:'Calcular incentivos fiscais (LALUR)',d:'Consolida total elegível, aplica alíquotas por categoria de projeto, calcula exclusão adicional. Base para ECF e DIRBI.',badges:['calc'],
+       props:{Alíquotas:'Básica 80%, Aplicada 70%, Experimental 60%',Adicional:'+ 10-20% se incremento de pesquisadores',Patente:'+ até 20% no período de concessão INPI',Saída:'Linhas LALUR para lançamento na ECF'},
+       tables:['formpd_fiscal_incentives','ecf_lalur_entries'],deps:['FORMP&D montado','Snapshot fechado']},
+      {t:'Gerar e validar ECD (SPED)',d:'Arquivo SPED ECD com base nas demonstrações importadas. Claude cruza dispêndios PD&I com contas contábeis e sinaliza divergências.',badges:['output','ai'],
+       props:{Formato:'SPED txt — leiaute Receita Federal vigente',Cruzamento:'Dispêndios PD&I × contas contábeis',Prazo:'31 de julho do ano seguinte',Destino:'SPED — Portal Receita Federal'},
+       tables:['financial_statements','ecd_exports'],deps:['DRE e Balanço importados','Exercício fiscal fechado'],
+       ai:{modelo:'claude-sonnet-4-6',cap:'200k tokens context window · prompt caching',custo:'Cache do arquivo ECD — 90% economia em reuso',code:`// Estratégia de prompt caching para ECD
+messages: [{
+  role: "user",
+  content: [
+    {
+      type: "text",
+      text: ecfContent,
+      cache_control: { type:"ephemeral" }
+    },
+    {
+      type: "text",
+      text: \`Localize as contas contábeis que
+correspondem aos dispêndios PD&I abaixo
+e confirme se os valores são consistentes
+com os declarados no FORMP&D:
+\${JSON.stringify(dispendiosSnapshot)}\`
+    }
+  ]
+}]`}},
+      {t:'Gerar ECF com exclusões LALUR',d:'Exclusões adicionais geradas a partir do total elegível. Percentuais por categoria aplicados automaticamente. Prazo: 31 de julho.',badges:['output'],
+       props:{LALUR:'Exclusão adicional 60%-80% dos dispêndios elegíveis',Patente:'Lançado no período de concessão INPI',Cruzamento:'formpd_fiscal_incentives → linhas LALUR ECF',Prazo:'31 de julho do ano seguinte'},
+       tables:['ecf_lalur_entries','ecf_exports'],deps:['ECD gerada','Incentivos fiscais calculados']},
+      {t:'Gerar DIRBI mensal',d:'Declaração mensal dos benefícios fiscais usufruídos, incluindo exclusões Lei do Bem. Gerada automaticamente com base nos dispêndios mensais.',badges:['output','auto'],
+       props:{Periodicidade:'Mensal — dia 20 do mês subsequente',Código:'Lei do Bem tem código específico na DIRBI',Base:'Dispêndios elegíveis do mês × alíquota',Destino:'Portal e-CAC Receita Federal'},
+       tables:['dirbi_monthly_records','dirbi_exports'],deps:['Alocações mensais finalizadas']},
+    ]
+  },
+  {
+    id:'m7', num:'M7', label:'Acompanhamento', ck:'m7',
+    title:'Acompanhamento de obrigações e pareceres',
+    sub:'Monitoramento do ciclo MCTI: pareceres, contestações, recursos e dashboard',
+    aiNote:'Claude analisa pareceres e sugere argumentos de contestação',
+    steps:[
+      {t:'Monitorar status do FORMP&D',d:'Acompanha o ciclo de análise do MCTI. Alerta quando parecer disponibilizado. Registra ciência e aciona prazo de contestação de 60 dias.',badges:['monitor'],
+       props:{Ciclo:'Submetido → Em análise → Parecer → Ciente → Prazo',Alerta:'Notificação quando parecer disponível no MCTI',Prazo:'60 dias para contestação a partir da ciência',Obrigação:'Empresa deve acessar regularmente (Art. 4º Portaria 9.563)'},
+       tables:['formpd_forms','formpd_opinions'],deps:['FORMP&D enviado ao MCTI']},
+      {t:'Registrar e analisar pareceres técnicos',d:'Cadastro do parecer emitido pelo MCTI. Claude lê o PDF, identifica glosas, classifica criticidade e extrai artigos invocados com citations API.',badges:['monitor','ai'],
+       props:{Tipos:'APROVADO, GLOSADO, APROVADO_PARCIAL, EM_ANALISE',Separação:'Módulo independente — 1 form pode ter N pareceres',Citations:'Rastreia trechos exatos do parecer → glosa',Impacto:'Glosa reduz base elegível → recalcula ECF'},
+       tables:['formpd_opinions'],deps:['Parecer emitido pelo MCTI'],
+       ai:{modelo:'claude-sonnet-4-6',cap:'PDF nativo · Citations API',custo:'Citations rastreia trechos exatos do parecer',code:`anthropic.messages.create({
+  model: "claude-sonnet-4-6",
+  max_tokens: 4096,
+  messages: [{
+    role: "user",
+    content: [
+      {
+        type: "document",
+        source: { type:"base64",
+          media_type:"application/pdf",
+          data: parecerBase64 },
+        citations: { enabled: true }
+      },
+      {
+        type: "text",
+        text: \`Analise este parecer MCTI.
+Identifique: (1) projetos glosados,
+(2) motivos da glosa, (3) artigos invocados,
+(4) argumentos para contestação em 60 dias.
+Retorne JSON estruturado.\`
+      }
+    ]
+  }]
+});\n→ formpd_opinions + contest_justification`}},
+      {t:'Processar contestação administrativa',d:'Prazo de 60 dias. Claude sugere argumentos técnicos com base no parecer e nos dados do projeto. Registra justificativa e documentos de suporte.',badges:['monitor','ai'],
+       props:{Prazo:'60 dias da ciência — Portaria MCTI 9.563/2025',Dados:'contest_justification + supporting_doc_ref',Status:'AGUARDANDO_RESPOSTA → DEFERIDO / INDEFERIDO',IA:'Claude Opus redige argumentação técnica'},
+       tables:['formpd_opinions'],deps:['Parecer registrado','Empresa ciente no prazo'],
+       ai:{modelo:'claude-opus-4-6',cap:'Extended thinking · context longo',custo:'Opus para argumentação crítica fiscal',code:`// Claude Opus raciocina antes de argumentar
+{
+  thinking: { type:"enabled", budget_tokens:6000 }
+}
+// Contexto: parecer + dados do projeto + snapshot
+// Saída: argumentos técnicos por ponto de glosa
+// → contest_justification (revisão humana obrigatória)`}},
+      {t:'Recurso administrativo (2ª instância)',d:'Segunda instância após contestação indeferida. Registra recurso com documentos adicionais e acompanha decisão final do MCTI.',badges:['monitor'],
+       props:{Campos:'appeal_filed_at + appeal_status + appeal_response',Status:'NAO_RECORRIDO → AGUARDANDO → DEFERIDO/INDEFERIDO',Impacto:'Decisão final atualiza base elegível',Histórico:'Rastreabilidade completa do ciclo MCTI'},
+       tables:['formpd_opinions'],deps:['Contestação indeferida']},
+      {t:'Dashboard consolidado de obrigações',d:'Painel de todas as obrigações pendentes, prazos, status FORMP&D e alertas. Visão por empresa ou portfólio multi-cliente para consultores.',badges:['auto'],
+       props:{Visões:'Por empresa ou portfólio N clientes',Alertas:'30 / 15 / 7 dias de antecedência configuráveis',Status:'Submetido, Em análise, Parecer, Contestação, Recurso',Exportação:'Relatório de compliance para cliente e auditoria'},
+       tables:['company_obligations','formpd_forms','formpd_opinions'],deps:['Todas as entidades configuradas']},
+    ]
+  },
+  {
+    id:'m8', num:'IA', label:'Claude API', ck:'m8',
+    title:'Integração Claude API — arquitetura e modelos',
+    sub:'Capacidades, modelo por função, governança e padrões de integração',
+    aiNote:'Camada transversal — serve todos os módulos',
+    steps:[
+      {t:'Seleção de modelo por função',d:'Opus para elaboração e contestação complexa. Sonnet para OCR, análise e contexto longo. Haiku para volumes altos e classificações em lote.',badges:['ai'],
+       props:{'claude-opus-4-6':'Narrativa FORMP&D + argumentação contestação','claude-sonnet-4-6':'OCR folha, análise parecer, cruzamento ECD','claude-haiku-4-5':'Batch elegibilidade, classificação ativos, alocação RH','Batch API':'50% desconto para processamento em volume'},
+       tables:[],deps:[],
+       ai:{modelo:'Três modelos em uso',cap:'Opus · Sonnet · Haiku',custo:'Cada função usa o modelo mais econômico',code:`// Matriz de decisão
+// Opus:   raciocínio profundo + extended thinking
+// Sonnet: equilíbrio inteligência × velocidade × custo
+// Haiku:  volume alto, baixo custo, respostas rápidas
+
+const MODEL = {
+  narrativa_formpd:    "claude-opus-4-6",
+  ocr_folha:           "claude-sonnet-4-6",
+  analise_parecer:     "claude-sonnet-4-6",
+  cruzamento_ecd:      "claude-sonnet-4-6",
+  batch_elegibilidade: "claude-haiku-4-5",
+  classificacao_ativo: "claude-haiku-4-5",
+  sugestao_alocacao:   "claude-haiku-4-5",
+  assistente_chat:     "claude-sonnet-4-6",
+};`}},
+      {t:'Capacidades críticas utilizadas',d:'PDF nativo, Citations API, Batch API, Prompt Caching, Tool Use, Extended Thinking. Cada capacidade mapeada a um caso de uso específico.',badges:['ai'],
+       props:{'PDF nativo':'Folhas, pareceres, ECD sem OCR externo','Citations API':'Rastreia trecho do parecer → glosa exata','Batch API':'50% custo — catálogo de rubricas em lote','Prompt Caching':'ECD e system prompts reutilizados ~90% economia'},
+       tables:[],deps:[],
+       ai:{modelo:'API Anthropic',cap:'Todas as capacidades modernas',custo:'Combinação otimiza custo × qualidade',code:`// Capacidades por caso de uso
+PDF_NATIVO:      OCR folha, análise parecer, cruzamento ECD
+CITATIONS_API:   Análise parecer com rastreamento de trechos
+BATCH_API:       Elegibilidade de rubricas em lote (50% off)
+PROMPT_CACHING:  System prompts e arquivos ECD/SPED (~90% off)
+TOOL_USE:        Assistente contextual + classificações estruturadas
+EXTENDED_THINK:  Narrativa FORMP&D + argumentação contestação
+STRUCTURED_OUT:  Todos os outputs → JSON → tabelas do schema`}},
+      {t:'Assistente contextual do sistema',d:'Chat com acesso ao contexto da empresa. "Qual o total elegível do Projeto X em 2024?" ou "O que falta para fechar o snapshot?"',badges:['ai'],
+       props:{Modelo:'claude-sonnet-4-6',Capacidade:'Tool use + multi-turn',Ferramentas:'query_snapshot, list_projects, get_obligations',Escopo:'Limitado ao company_id do usuário logado'},
+       tables:[],deps:['Usuário autenticado'],
+       ai:{modelo:'claude-sonnet-4-6',cap:'Tool use · multi-turn · streaming',custo:'Respostas via SSE para UX em tempo real',code:`const tools = [
+  {
+    name: "query_snapshot",
+    description: "Consulta dispêndios do snapshot",
+    input_schema: {
+      properties: {
+        project_id: { type:"integer" },
+        base_year: { type:"integer" }
+      }
+    }
+  },
+  {
+    name: "list_pending_obligations",
+    description: "Lista obrigações fiscais pendentes",
+    input_schema: {
+      properties: {
+        days_ahead: { type:"integer", default:30 }
+      }
+    }
+  }
+];\n// Cada tool call filtra por company_id do usuário`}},
+      {t:'Governança de dados gerados por IA',d:'Todo output de IA entra com confirmed_by_human=0 e não afeta cálculos fiscais até revisão explícita. Snapshots fechados são imutáveis.',badges:['ai'],
+       props:{'confirmed_by_human=0':'Todo output IA aguarda revisão humana','Promoção bloqueada':'IA não promove dados a snapshots fechados','Rastreabilidade':'ai_extraction_meta em payroll_import_jobs','Auditoria':'Histórico de sugestões e confirmações'},
+       tables:['payroll_rubric_maps','payroll_import_jobs','rdi_hr_allocations','rdi_assets'],deps:[]},
+    ]
+  },
+];
+
+const sidebar = document.getElementById('sidebar');
+const main = document.getElementById('main');
+const ovGrid = document.getElementById('ov-grid');
+const flowStrip = document.getElementById('flow-strip');
+
+MODULES.forEach((m, i) => {
+  const ck = C[m.ck];
+
+  // sidebar nav
+  const nav = document.createElement('div');
+  nav.className = 'nav';
+  nav.dataset.sec = m.id;
+  nav.onclick = () => goSec(m.id, nav);
+  nav.innerHTML = `<div class="nav-dot" style="background:${ck.c}"></div>${m.label}${m.aiNote?'<span style="margin-left:4px;font-size:9px;color:var(--acc)">●</span>':''}<span class="nav-badge">${m.num}</span>`;
+  sidebar.appendChild(nav);
+
+  // overview card
+  const oc = document.createElement('div');
+  oc.className = 'ov-card';
+  oc.style.cssText = `background:${ck.d};border-color:${ck.b}`;
+  oc.onclick = () => goSec(m.id, document.querySelector(`[data-sec="${m.id}"]`));
+  oc.innerHTML = `
+    <div class="ov-num" style="color:${ck.c}">${m.num}</div>
+    <div class="ov-name" style="color:${ck.c}">${m.title.split(' e ')[0].split(' e ')[0]}</div>
+    <div class="ov-sub" style="color:${ck.c}">${m.sub.slice(0,55)}…</div>
+    ${m.aiNote ? `<div class="ov-ai-badge">Claude IA</div>` : ''}
+  `;
+  ovGrid.appendChild(oc);
+
+  // flow strip
+  const fn = document.createElement('div');
+  fn.className = 'fn';
+  fn.style.cssText = `background:${ck.d};border-color:${ck.b};color:${ck.c}`;
+  fn.textContent = m.num + ' ' + m.label;
+  fn.onclick = () => goSec(m.id, document.querySelector(`[data-sec="${m.id}"]`));
+  flowStrip.appendChild(fn);
+  if (i < MODULES.length - 1) {
+    const fa = document.createElement('span');
+    fa.className = 'fa';
+    fa.textContent = '→';
+    flowStrip.appendChild(fa);
+  }
+
+  // section
+  const sec = document.createElement('section');
+  sec.className = 'sec';
+  sec.id = 'sec-' + m.id;
+
+  const stepsHTML = buildSteps(m);
+  sec.innerHTML = `
+    <div class="mod-header">
+      <div class="mod-pill" style="background:${ck.d};border:0.5px solid ${ck.b};color:${ck.c}">${m.num}</div>
+      <div>
+        <div class="mod-title">${m.title}</div>
+        <div class="mod-sub">${m.sub}</div>
+        ${m.aiNote ? `<div style="margin-top:5px;font-size:11px;color:var(--acc);font-family:var(--mono)">● ${m.aiNote}</div>` : ''}
+      </div>
+    </div>
+    <div class="steps-grid">${stepsHTML}</div>
+    <div class="pg-footer">${m.num} · ${m.title} · ${m.steps.length} etapas · Inncentive — Lei nº 11.196/2005</div>
+  `;
+  main.appendChild(sec);
+});
+
+function buildSteps(m) {
+  let html = '';
+  const ck = C[m.ck];
+  for (let i = 0; i < m.steps.length; i++) {
+    const s = m.steps[i];
+    const even = i % 2 === 0;
+    if (even) html += `<div class="step-pair">`;
+
+    const badges = s.badges.map(b => `<span class="sbadge b-${b}">${{import:'importação',manual:'configuração',auto:'automático',calc:'cálculo',output:'saída',monitor:'monitoramento',ai:'Claude IA'}[b]}</span>`).join('');
+
+    html += `<div class="step" id="step-${m.id}-${i}" onclick="toggleStep('${m.id}',${i})">
+      <div class="step-idx">${m.num}.${i+1}</div>
+      <div class="step-title">${s.t}</div>
+      <div class="step-desc">${s.d}</div>
+      <div class="step-badges">${badges}</div>
+    </div>`;
+
+    if (!even || i === m.steps.length - 1) {
+      if (m.steps.length % 2 !== 0 && i === m.steps.length - 1 && even) {
+        html += `<div></div>`;
+      }
+      html += `</div>`;
+      const pairIdx = even ? i : i - 1;
+      for (let j = pairIdx; j <= Math.min(pairIdx + 1, m.steps.length - 1); j++) {
+        html += `<div class="drawer" id="drw-${m.id}-${j}"></div>`;
+      }
+    }
+  }
+  return html;
+}
+
+function toggleStep(mId, idx) {
+  const stepEl = document.getElementById(`step-${mId}-${idx}`);
+  const drwEl = document.getElementById(`drw-${mId}-${idx}`);
+  const m = MODULES.find(x => x.id === mId);
+  const s = m.steps[idx];
+  const ck = C[m.ck];
+  const wasOpen = stepEl.classList.contains('open');
+
+  document.querySelectorAll(`#sec-${mId} .step`).forEach(el => el.classList.remove('open'));
+  document.querySelectorAll(`#sec-${mId} .drawer`).forEach(el => { el.classList.remove('open'); el.innerHTML = ''; });
+
+  if (!wasOpen) {
+    stepEl.classList.add('open');
+    drwEl.classList.add('open');
+    drwEl.innerHTML = buildDrawer(s, ck);
+  }
+}
+
+function buildDrawer(s, ck) {
+  const props = Object.entries(s.props || {}).map(([k,v]) =>
+    `<div class="drw-prop"><div class="dp-k">${k}</div><div class="dp-v">${v}</div></div>`
+  ).join('');
+  const tables = (s.tables || []).map(t => `<span class="tag">${t}</span>`).join('');
+  const deps = s.deps && s.deps.length
+    ? s.deps.map(d => `<div class="dep-item">${d}</div>`).join('')
+    : `<div style="font-size:11px;color:var(--faint);font-style:italic">Sem dependências prévias</div>`;
+  let aiBlock = '';
+  if (s.ai) {
+    const code = s.ai.code
+      .replace(/anthropic\./g, '<span class="fn">anthropic.</span>')
+      .replace(/"([^"]+)":/g, '<span class="kw">"$1":</span>')
+      .replace(/\/\/.+/g, m => `<span class="cm">${m}</span>`);
+    aiBlock = `
+      <div class="drw-sec" style="margin-top:12px;padding:12px 13px;background:var(--acc-d);border:0.5px solid var(--acc-b);border-radius:var(--r);">
+        <div class="drw-sec-label" style="color:var(--acc);margin-bottom:8px">Claude API — integração</div>
+        <div class="drw-props" style="margin-bottom:10px">
+          <div class="drw-prop"><div class="dp-k">modelo</div><div class="dp-v" style="color:var(--acc)">${s.ai.modelo}</div></div>
+          <div class="drw-prop"><div class="dp-k">capacidade</div><div class="dp-v">${s.ai.cap}</div></div>
+          <div class="drw-prop" style="grid-column:span 2"><div class="dp-k">estratégia</div><div class="dp-v">${s.ai.custo}</div></div>
+        </div>
+        <div class="drw-sec-label">Padrão de código</div>
+        <div class="code-blk">${code}</div>
+      </div>`;
+  }
+  return `
+    <div class="drw-head">${s.t}</div>
+    <div class="drw-props">${props}</div>
+    ${tables ? `<div class="drw-sec"><div class="drw-sec-label">Tabelas do schema</div><div class="tags">${tables}${s.ai ? '<span class="tag ai-tag">Claude API</span>' : ''}</div></div>` : ''}
+    <div class="drw-sec" style="margin-top:10px"><div class="drw-sec-label">Dependências obrigatórias</div>${deps}</div>
+    ${aiBlock}`;
+}
+
+function goSec(id, navEl) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.nav').forEach(n => n.classList.remove('on'));
+  const targetSec = document.getElementById('sec-' + id);
+  if (targetSec) targetSec.classList.add('on');
+  if (navEl) navEl.classList.add('on');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
