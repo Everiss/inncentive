@@ -22,6 +22,11 @@ export class CompaniesController {
     });
   }
 
+  @Get('stats')
+  async getStats() {
+    return this.companiesService.getStats();
+  }
+
   @Get(':id')
   async findById(@Param('id') id: string) {
     const company = await this.companiesService.findById(Number(id));

@@ -151,10 +151,11 @@ export default function ImportBatchesList() {
         </div>
       </div>
       {selectedBatch && (
-        <ImportBatchItemsModal 
-          batch={selectedBatch} 
-          onClose={() => setSelectedBatch(null)} 
-          onReprocessed={() => fetchBatches()} 
+        <ImportBatchItemsModal
+          batch={selectedBatch}
+          onClose={() => setSelectedBatch(null)}
+          onReprocessed={() => fetchBatches()}
+          onDeleted={() => { setSelectedBatch(null); fetchBatches(); }}
         />
       )}
     </div>

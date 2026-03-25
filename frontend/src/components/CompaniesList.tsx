@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/api';
-import { Building2, Plus, Search, MoreHorizontal, ArrowUpRight, UploadCloud, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Plus, Search, MoreHorizontal, ArrowUpRight, UploadCloud, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Sparkles, LayoutGrid } from 'lucide-react';
 import { ImportCompaniesModal } from './modals/ImportCompaniesModal';
 import { NewCompanyModal } from './modals/NewCompanyModal';
 import { formatCnpj } from '../lib/utils';
@@ -15,6 +15,13 @@ interface Company {
   addresses: any[];
 }
 
+interface Stats {
+  total: number;
+  active: number;
+  irregular: number;
+  newThisMonth: number;
+}
+
 interface Props {
   onSelectCompany: (id: number) => void;
 }
@@ -22,6 +29,7 @@ interface Props {
 export default function CompaniesList({ onSelectCompany }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<Stats | null>(null);
   
   // Pagination & Sorting States
   const [page, setPage] = useState(1);
@@ -46,6 +54,10 @@ export default function CompaniesList({ onSelectCompany }: Props) {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  useEffect(() => {
+    api.get('/companies/stats').then(res => setStats(res.data)).catch(() => {});
+  }, []);
 
   const fetchCompanies = () => {
     setLoading(true);
@@ -88,8 +100,65 @@ export default function CompaniesList({ onSelectCompany }: Props) {
     return sortOrder === 'asc' ? <ChevronUp className="w-4 h-4 inline ml-1" /> : <ChevronDown className="w-4 h-4 inline ml-1" />;
   };
 
+  const statCards = [
+    {
+      label: 'Total de Empresas',
+      value: stats?.total ?? '—',
+      icon: <LayoutGrid className="w-5 h-5" />,
+      color: 'text-blue-600 dark:text-blue-400',
+      bg: 'bg-blue-50 dark:bg-blue-500/10',
+      border: 'border-blue-100 dark:border-blue-500/20',
+    },
+    {
+      label: 'Ativas',
+      value: stats?.active ?? '—',
+      sub: stats ? `${Math.round((stats.active / (stats.total || 1)) * 100)}%` : null,
+      icon: <CheckCircle2 className="w-5 h-5" />,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+      border: 'border-emerald-100 dark:border-emerald-500/20',
+    },
+    {
+      label: 'Situação Irregular',
+      value: stats?.irregular ?? '—',
+      icon: <AlertTriangle className="w-5 h-5" />,
+      color: 'text-amber-600 dark:text-amber-400',
+      bg: 'bg-amber-50 dark:bg-amber-500/10',
+      border: 'border-amber-100 dark:border-amber-500/20',
+    },
+    {
+      label: 'Novas este Mês',
+      value: stats?.newThisMonth ?? '—',
+      icon: <Sparkles className="w-5 h-5" />,
+      color: 'text-violet-600 dark:text-violet-400',
+      bg: 'bg-violet-50 dark:bg-violet-500/10',
+      border: 'border-violet-100 dark:border-violet-500/20',
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Indicator Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map(card => (
+          <div
+            key={card.label}
+            className={`rounded-2xl border ${card.border} bg-white dark:bg-slate-900 p-5 flex items-center gap-4 shadow-sm`}
+          >
+            <div className={`w-11 h-11 rounded-xl ${card.bg} ${card.color} flex items-center justify-center shrink-0`}>
+              {card.icon}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">{card.label}</p>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <span className={`text-2xl font-bold ${card.color}`}>{card.value}</span>
+                {card.sub && <span className="text-xs text-slate-400 dark:text-slate-500">{card.sub}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Search and Actions Bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
         <div className="relative w-full sm:w-96">

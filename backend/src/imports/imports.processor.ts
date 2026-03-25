@@ -46,7 +46,13 @@ export class ImportsProcessor extends WorkerHost {
         case 'process-cnpj':
           isSuccess = await this.importAndSaveCompany(job.data.cnpj);
           if (!isSuccess) errorMsg = 'Falha na ReceitaWS ou ao Salvar.';
-          
+
+          // If this CNPJ job was triggered to satisfy a COMPANY_NOT_FOUND FORMPD batch,
+          // link back to that batch once the company is saved.
+          if (isSuccess && job.data.formpd_batch_id) {
+            await this.linkFormpdBatch(job.data.cnpj, job.data.formpd_batch_id);
+          }
+
           // Delay inteligente baseado no plano
           const token = this.configService.get<string>('RECEITA_WS_TOKEN');
           const delay = token ? 3200 : 20500; // 3.2s para plano de 20req/min, 20.5s para free
@@ -132,26 +138,44 @@ export class ImportsProcessor extends WorkerHost {
         return false;
       }
 
-      let openDate = null;
-      if (data.abertura) {
-        const parts = data.abertura.split('/');
-        if (parts.length === 3) openDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00Z`);
-      }
+      const parseBrDate = (str?: string): Date | null => {
+        if (!str) return null;
+        const parts = str.split('/');
+        if (parts.length !== 3) return null;
+        return new Date(`${parts[2]}-${parts[1]}-${parts[0]}T00:00:00Z`);
+      };
+
+      const parseBrDecimal = (str?: string): number | null => {
+        if (!str) return null;
+        // ReceitaWS returns capital_social as standard decimal ("1658292882.00"),
+        // not Brazilian format — parse directly without stripping dots.
+        const n = parseFloat(str.replace(',', '.'));
+        return isNaN(n) ? null : n;
+      };
+
+      const openDate = parseBrDate(data.abertura);
+      const situationDate = parseBrDate(data.data_situacao);
+      const capitalSocial = parseBrDecimal(data.capital_social);
+
+      const companyFields = {
+        legal_name: data.nome,
+        trade_name: data.fantasia || null,
+        email: data.email || null,
+        legal_nature: data.natureza_juridica || null,
+        porte: data.porte || null,
+        capital_social: capitalSocial,
+        situation: data.situacao || null,
+        situation_reason: data.motivo_situacao || null,
+        situation_date: situationDate,
+      };
 
       const company = await this.prisma.companies.upsert({
         where: { cnpj },
-        update: {
-          legal_name: data.nome,
-          trade_name: data.fantasia || null,
-          email: data.email || null,
-          updated_at: new Date(),
-        },
+        update: { ...companyFields, updated_at: new Date() },
         create: {
           cnpj,
-          legal_name: data.nome,
-          trade_name: data.fantasia || null,
+          ...companyFields,
           open_date: openDate,
-          email: data.email || null,
           status: 'OK',
         },
       });
@@ -163,9 +187,60 @@ export class ImportsProcessor extends WorkerHost {
         }).catch(() => null);
       }
 
+      if (data.logradouro) {
+        await this.prisma.addresses.deleteMany({ where: { company_id: company.id } });
+        await this.prisma.addresses.create({
+          data: {
+            company_id: company.id,
+            street: data.logradouro,
+            number: data.numero || null,
+            complement: data.complemento || null,
+            neighborhood: data.bairro || null,
+            city: data.municipio || null,
+            state: data.uf || null,
+            zip_code: data.cep ? data.cep.replace(/\D/g, '') : null,
+          },
+        });
+      }
+
+      await this.syncCnaes(company.id, data);
       await this.contactsService.syncContactsFromReceitaWS(company.id, data);
       return true;
     } catch { return false; }
+  }
+
+  private async syncCnaes(companyId: number, data: any): Promise<void> {
+    const primary: any[] = data.atividade_principal || [];
+    const secondary: any[] = data.atividades_secundarias || [];
+
+    const all = [
+      ...primary.map((a) => ({ code: a.code, description: a.text, isPrimary: true })),
+      ...secondary.map((a) => ({ code: a.code, description: a.text, isPrimary: false })),
+    ].filter((a) => a.code);
+
+    for (const activity of all) {
+      // Upsert the CNAE code reference
+      await this.prisma.cnaes.upsert({
+        where: { code: activity.code },
+        update: { description: activity.description },
+        create: { code: activity.code, description: activity.description },
+      });
+
+      // Upsert the company link
+      const existing = await this.prisma.company_cnaes.findUnique({
+        where: { company_id_cnae_code: { company_id: companyId, cnae_code: activity.code } },
+      });
+      if (existing) {
+        await this.prisma.company_cnaes.update({
+          where: { company_id_cnae_code: { company_id: companyId, cnae_code: activity.code } },
+          data: { is_primary: activity.isPrimary },
+        });
+      } else {
+        await this.prisma.company_cnaes.create({
+          data: { company_id: companyId, cnae_code: activity.code, is_primary: activity.isPrimary },
+        });
+      }
+    }
   }
 
   private async processContactRow(row: any, contextCompanyId?: number): Promise<boolean> {
@@ -260,6 +335,55 @@ export class ImportsProcessor extends WorkerHost {
     });
 
     return true;
+  }
+
+  /**
+   * After a CNPJ job succeeds, if it was triggered to satisfy a FORMPD
+   * COMPANY_NOT_FOUND batch, update that batch to PENDING_REVIEW and emit
+   * a socket event so the frontend can prompt the user to review.
+   */
+  private async linkFormpdBatch(cnpj: string, formpd_batch_id: number) {
+    try {
+      const company = await this.prisma.companies.findUnique({
+        where: { cnpj },
+        select: { id: true, legal_name: true },
+      });
+      if (!company) return;
+
+      // Update FORMPD batch
+      await this.prisma.import_batches.update({
+        where: { id: formpd_batch_id },
+        data: { company_id: company.id, status: 'PENDING_REVIEW' },
+      });
+
+      // Patch the item's record_data with company info
+      const item = await this.prisma.import_items.findFirst({
+        where: { batch_id: formpd_batch_id },
+      });
+      if (item) {
+        let parsed: any = {};
+        try { parsed = JSON.parse(item.record_data); } catch { /* */ }
+        parsed.company_id = company.id;
+        parsed.company_name = company.legal_name;
+        await this.prisma.import_items.update({
+          where: { id: item.id },
+          data: { record_data: JSON.stringify(parsed) },
+        });
+      }
+
+      this.notificationsGateway.sendFormpdCompanyRegistered({
+        batchId: formpd_batch_id,
+        companyId: company.id,
+        companyName: company.legal_name,
+        cnpj,
+      });
+
+      this.logger.log(
+        `FORMPD Batch ${formpd_batch_id} linked to company id=${company.id} after CNPJ registration`,
+      );
+    } catch (e: any) {
+      this.logger.error(`linkFormpdBatch error: ${e.message}`);
+    }
   }
 
   @OnWorkerEvent('failed')

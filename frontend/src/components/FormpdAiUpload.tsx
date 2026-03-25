@@ -9,11 +9,13 @@ import toast from 'react-hot-toast';
 
 interface Props {
   onComplete?: () => void;
+  /** When set, the backend validates that the extracted CNPJ matches this company. */
+  companyId?: number;
 }
 
 type Step = 'idle' | 'uploading' | 'queued';
 
-export default function FormpdAiUpload({ onComplete }: Props) {
+export default function FormpdAiUpload({ onComplete, companyId }: Props) {
   const [step, setStep] = useState<Step>('idle');
   const [batchId, setBatchId] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -36,7 +38,10 @@ export default function FormpdAiUpload({ onComplete }: Props) {
     formData.append('file', file);
 
     try {
-      const res = await api.post('/imports/upload-formpd-ai', formData, {
+      const url = companyId
+        ? `/imports/upload-formpd-ai?companyId=${companyId}`
+        : '/imports/upload-formpd-ai';
+      const res = await api.post(url, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setBatchId(res.data.batchId);

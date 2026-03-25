@@ -43,6 +43,11 @@ export interface IaRequest {
   overrideProvider?: IaProvider;
   /** Força um modelo específico (opcional) */
   overrideModel?: string;
+  /**
+   * Contexto de chunking para documentos grandes divididos em partes.
+   * O provider usa isso para ajustar a instrução de cada trecho.
+   */
+  chunkContext?: { index: number; total: number };
 }
 
 // ─── Resposta do motor de IA ───────────────────────────────────────────────

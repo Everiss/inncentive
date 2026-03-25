@@ -8,6 +8,24 @@ export class FormpdService {
   constructor(private prisma: PrismaService) {}
 
   /**
+   * List all FORMP&D forms across all companies (global view).
+   */
+  async findAllForms() {
+    return this.prisma.formpd_forms.findMany({
+      orderBy: [{ base_year: 'desc' }, { created_at: 'desc' }],
+      include: {
+        companies: {
+          select: { id: true, legal_name: true, trade_name: true, cnpj: true },
+        },
+        formpd_projects: { select: { id: true } },
+        formpd_fiscal_incentives: {
+          select: { total_benefit: true, total_rnd_expenditure: true },
+        },
+      },
+    });
+  }
+
+  /**
    * List all FORMP&D forms for a specific company.
    */
   async findFormsByCompany(companyId: number) {

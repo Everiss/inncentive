@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/api';
-import { X, CheckCircle2, AlertCircle, Clock, RefreshCw } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Clock, RefreshCw, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Props {
   batch: any;
   onClose: () => void;
   onReprocessed: () => void;
+  onDeleted?: () => void;
 }
 
-export function ImportBatchItemsModal({ batch, onClose, onReprocessed }: Props) {
+export function ImportBatchItemsModal({ batch, onClose, onReprocessed, onDeleted }: Props) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [reprocessing, setReprocessing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchItems = () => {
     setLoading(true);
@@ -54,6 +57,27 @@ export function ImportBatchItemsModal({ batch, onClose, onReprocessed }: Props) 
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await toast.promise(
+        api.delete(`/imports/batches/${batch.id}`),
+        {
+          loading: 'Excluindo lote...',
+          success: 'Lote excluído com sucesso.',
+          error: 'Falha ao excluir o lote.',
+        }
+      );
+      onDeleted?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (!batch) return null;
 
   return (
@@ -66,7 +90,7 @@ export function ImportBatchItemsModal({ batch, onClose, onReprocessed }: Props) 
           </div>
           <div className="flex gap-3 items-center">
             {batch.error_count > 0 && (
-              <button 
+              <button
                 onClick={handleReprocess}
                 disabled={reprocessing}
                 className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 font-semibold rounded-xl text-sm flex items-center gap-2 hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
@@ -74,6 +98,33 @@ export function ImportBatchItemsModal({ batch, onClose, onReprocessed }: Props) 
                 <RefreshCw className={`w-4 h-4 ${reprocessing ? 'animate-spin' : ''}`} />
                 Reprocessar Falhas
               </button>
+            )}
+            {!confirmDelete ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="px-4 py-2 bg-red-50 dark:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold rounded-xl text-sm flex items-center gap-2 hover:bg-red-100 dark:hover:bg-red-500/30 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Excluir
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">
+                <span className="text-sm text-red-700 dark:text-red-300 font-medium">Confirmar exclusão?</span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Sim
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Não
+                </button>
+              </div>
             )}
             <button
               onClick={onClose}
@@ -118,14 +169,14 @@ export function ImportBatchItemsModal({ batch, onClose, onReprocessed }: Props) 
         </div>
 
         <div className="p-4 border-t border-blue-50 dark:border-slate-800 flex items-center justify-between text-sm bg-slate-50/50 dark:bg-slate-800/20">
-          <button 
+          <button
              disabled={page === 1} onClick={() => setPage(page - 1)}
              className="px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm disabled:opacity-50"
           >
              Anterior
           </button>
           <span className="text-slate-500">Pág {page} de {totalPages || 1}</span>
-          <button 
+          <button
              disabled={page >= totalPages} onClick={() => setPage(page + 1)}
              className="px-3 py-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm disabled:opacity-50"
           >

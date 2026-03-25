@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Query, UseInterceptors, UploadedFile, BadRequestException, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Query, UseInterceptors, UploadedFile, BadRequestException, ParseIntPipe, Body } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImportsService } from './imports.service';
 import { memoryStorage } from 'multer';
@@ -46,17 +46,21 @@ export class ImportsController {
     return this.importsService.processProjectsFile(file, companyId ? Number(companyId) : undefined);
   }
 
+  /**
+   * Upload a FORMP&D PDF for AI extraction.
+   * - Without companyId: global flow — asks user if company is unknown
+   * - With companyId: company-scoped flow — rejects if extracted CNPJ doesn't match
+   */
   @Post('upload-formpd-ai')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  async uploadFormpdAi(@UploadedFile() file: Express.Multer.File) {
+  async uploadFormpdAi(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('companyId') companyId?: string,
+  ) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
 
-    // CNPJ e ano-base serão extraídos do PDF pela IA
     const destDir = path.join(process.cwd(), 'upload', 'pending', 'FORM');
-
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
 
     const timestamp = Date.now();
     const cleanFileName = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
@@ -69,7 +73,28 @@ export class ImportsController {
     file.destination = destDir;
     file.filename = finalFileName;
 
-    return this.importsService.processFormpdPdf(file);
+    return this.importsService.processFormpdPdf(
+      file,
+      companyId ? Number(companyId) : undefined,
+    );
+  }
+
+  /** Register the company found in a COMPANY_NOT_FOUND FORMPD batch. */
+  @Post('formpd/batches/:id/register-company')
+  async registerCompanyForBatch(@Param('id', ParseIntPipe) id: number) {
+    return this.importsService.registerCompanyForBatch(id);
+  }
+
+  /** Discard a FORMPD batch — moves PDF to rejected folder. */
+  @Post('formpd/batches/:id/discard')
+  async discardBatch(@Param('id', ParseIntPipe) id: number) {
+    return this.importsService.discardBatch(id);
+  }
+
+  /** Approve a FORMPD batch — promotes data to formpd_forms + projects. */
+  @Post('formpd/batches/:id/approve')
+  async approveBatch(@Param('id', ParseIntPipe) id: number) {
+    return this.importsService.approveBatch(id);
   }
 
   @Get('check-cnpj')
@@ -79,8 +104,14 @@ export class ImportsController {
   }
 
   @Get('batches')
-  async getBatches() {
-    return this.importsService.getBatches();
+  async getBatches(
+    @Query('companyId') companyId?: string,
+    @Query('entityType') entityType?: string,
+  ) {
+    return this.importsService.getBatches(
+      companyId ? Number(companyId) : undefined,
+      entityType,
+    );
   }
 
   @Get('batches/:id/items')
@@ -95,5 +126,10 @@ export class ImportsController {
   @Post('batches/:id/reprocess')
   async reprocessBatch(@Param('id', ParseIntPipe) id: number) {
     return this.importsService.reprocessBatch(id);
+  }
+
+  @Delete('batches/:id')
+  async deleteBatch(@Param('id', ParseIntPipe) id: number) {
+    return this.importsService.deleteBatch(id);
   }
 }

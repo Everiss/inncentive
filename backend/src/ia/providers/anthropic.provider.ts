@@ -117,10 +117,36 @@ export class AnthropicProvider {
       const instruction = await this.resolvePrompt(request.task, 'TASK_INSTRUCTION');
       content.push({ type: 'text', text: instruction });
     } else {
-      content.push({ type: 'text', text: request.content });
+      const baseInstruction = await this.resolvePrompt(request.task, 'TASK_INSTRUCTION');
+      const instruction     = this.buildChunkInstruction(baseInstruction, request.chunkContext);
+      content.push({ type: 'text', text: `${instruction}\n\n---\n\n${request.content}` });
     }
 
     return content;
+  }
+
+  /**
+   * Adapts the task instruction when the document is split into chunks.
+   * For single documents, returns the base instruction unchanged.
+   */
+  private buildChunkInstruction(
+    base: string,
+    chunk?: { index: number; total: number },
+  ): string {
+    if (!chunk || chunk.total === 1) return base;
+
+    const position = chunk.index === 0
+      ? 'TRECHO INICIAL (primeira parte)'
+      : chunk.index === chunk.total - 1
+        ? 'TRECHO FINAL (última parte)'
+        : `TRECHO INTERMEDIÁRIO (parte ${chunk.index + 1} de ${chunk.total})`;
+
+    return (
+      `ATENÇÃO: Este é o ${position} de um documento dividido em ${chunk.total} trechos por ser muito extenso.\n` +
+      `Extraia TODOS os dados disponíveis neste trecho. Para campos não encontrados nesta parte, use null.\n` +
+      `Os resultados de todos os trechos serão mesclados automaticamente.\n\n` +
+      base
+    );
   }
 
   private parseJsonResponse(text: string, task: IaTask): Record<string, any> {

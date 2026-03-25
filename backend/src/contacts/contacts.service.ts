@@ -9,14 +9,9 @@ export class ContactsService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Extracts contact data from a ReceitaWS company response and
-   * upserts each valid contact linked to the given company.
-   *
-   * Criteria — must have:
-   *  - a name (nome)
-   *  - AND at least one of: email OR phone
-   *
-   * Phone numbers are stored in `contact_phones` (1:N).
+   * Syncs data from a ReceitaWS company response:
+   * - `responsavel`: saved as a PONTO_FOCAL contact (only when email or phone is available)
+   * - `qsa`: saved exclusively to the `partners` + `company_partners` tables (quadro societário)
    */
   async syncContactsFromReceitaWS(companyId: number, data: any): Promise<void> {
     const qsa: any[] = data.qsa || [];
@@ -24,39 +19,64 @@ export class ContactsService {
     const companyEmail: string | null = data.email?.trim() || null;
     const companyPhone: string | null = data.telefone?.trim() || null;
 
-    const phones = parseReceitaWSPhones(companyPhone);
-
-    // Heuristic: Identify the "Lead" contact who gets the company's main email/phone
-    // Favor explicit "responsavel" field, or the first person in QSA.
-    const leadPartner = qsa.find((s) => !this.looksLikeLegalEntity(s.nome));
-    const mainName = responsavel || leadPartner?.nome;
-
-    if (mainName && !this.looksLikeLegalEntity(mainName)) {
-      this.logger.log(`Syncing lead contact: ${mainName}`);
-      await this.upsertContactComplete({
-        name: mainName,
-        email: companyEmail,
-        phones,
-        companyId,
-        role: 'PONTO_FOCAL',
-        notes: responsavel ? 'Responsável Principal' : 'Lead Partner (QSA)',
-      });
+    // Save responsavel as contact only when there is actual contact info
+    if (responsavel && !this.looksLikeLegalEntity(responsavel)) {
+      const phones = parseReceitaWSPhones(companyPhone);
+      if (companyEmail || phones.length > 0) {
+        this.logger.log(`Syncing lead contact (responsavel): ${responsavel}`);
+        await this.upsertContactComplete({
+          name: responsavel,
+          email: companyEmail,
+          phones,
+          companyId,
+          role: 'PONTO_FOCAL',
+          notes: 'Responsável Principal',
+        });
+      }
     }
 
-    // Process all other partners in QSA
+    // Save every QSA member to the quadro societário tables
     for (const socio of qsa) {
       const nome: string = socio.nome?.trim() || '';
-      if (!nome || this.looksLikeLegalEntity(nome) || nome === mainName) continue;
+      if (!nome) continue;
 
-      this.logger.log(`Syncing partner: ${nome}`);
-      await this.upsertContactComplete({
-        name: nome,
-        email: null,
-        phones: [], // QSA usually doesn't provide phones for every partner
-        companyId,
-        role: 'PONTO_FOCAL',
-        notes: socio.qual || 'Sócio',
+      const countryOrigin: string | null = socio.pais_origem?.trim() || null;
+      const qualification: string | null = socio.qual?.trim() || null;
+      const legalRepName: string | null = socio.nome_rep_legal?.trim() || null;
+      const legalRepQual: string | null = socio.qual_rep_legal?.trim() || null;
+
+      this.logger.log(`Syncing QSA partner to quadro societário: ${nome}`);
+
+      // Upsert partner record
+      let partner = await this.prisma.partners.findFirst({
+        where: { name: nome, country_origin: countryOrigin },
       });
+      if (!partner) {
+        partner = await this.prisma.partners.create({
+          data: { name: nome, country_origin: countryOrigin },
+        });
+      }
+
+      // Upsert company_partners link
+      const link = await this.prisma.company_partners.findFirst({
+        where: { company_id: companyId, partner_id: partner.id },
+      });
+      if (link) {
+        await this.prisma.company_partners.update({
+          where: { id: link.id },
+          data: { qualification, legal_rep_name: legalRepName, legal_rep_qualification: legalRepQual },
+        });
+      } else {
+        await this.prisma.company_partners.create({
+          data: {
+            company_id: companyId,
+            partner_id: partner.id,
+            qualification,
+            legal_rep_name: legalRepName,
+            legal_rep_qualification: legalRepQual,
+          },
+        });
+      }
     }
   }
 

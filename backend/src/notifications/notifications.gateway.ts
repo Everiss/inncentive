@@ -2,6 +2,29 @@ import { WebSocketGateway, WebSocketServer, OnGatewayInit, OnGatewayConnection, 
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 
+export type FormpdStatus =
+  | 'PENDING_REVIEW'
+  | 'CNPJ_MISMATCH'
+  | 'COMPANY_NOT_FOUND'
+  | 'INVALID_FORMPD'
+  | 'ERROR';
+
+export interface FormpdCompletedPayload {
+  batchId: number;
+  status: FormpdStatus;
+  cnpjFromForm: string | null;
+  companyId: number | null;
+  companyName: string | null;
+  errorMessage?: string;
+}
+
+export interface FormpdCompanyRegisteredPayload {
+  batchId: number;
+  companyId: number;
+  companyName: string;
+  cnpj: string;
+}
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -31,15 +54,11 @@ export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection,
     this.server.emit('import:completed', data);
   }
 
-  sendFormpdCompleted(data: {
-    batchId: number;
-    isValidFormpd: boolean;
-    validationError?: string;
-    cnpjFromForm: string | null;
-    companyId: number | null;
-    companyName: string | null;
-    companyRegistrationQueued: boolean;
-  }) {
+  sendFormpdCompleted(data: FormpdCompletedPayload) {
     this.server.emit('formpd:completed', data);
+  }
+
+  sendFormpdCompanyRegistered(data: FormpdCompanyRegisteredPayload) {
+    this.server.emit('formpd:company-registered', data);
   }
 }

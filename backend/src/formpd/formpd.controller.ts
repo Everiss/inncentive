@@ -5,6 +5,12 @@ import { FormpdService } from './formpd.service';
 export class FormpdController {
   constructor(private readonly formpdService: FormpdService) {}
 
+  /** Global list — all forms across all companies */
+  @Get('all')
+  async findAll() {
+    return this.formpdService.findAllForms();
+  }
+
   @Get()
   async findByCompany(@Query('companyId', ParseIntPipe) companyId: number) {
     return this.formpdService.findFormsByCompany(companyId);
