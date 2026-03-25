@@ -253,8 +253,8 @@ export class ProjectsService {
    * Called when closing a fiscal year.
    */
   async getOrCreateSnapshot(projectId: number, baseYear: number) {
-    const existing = await this.prisma.rdi_project_annual_snapshots.findUnique({
-      where: { project_id_base_year: { project_id: projectId, base_year: baseYear } },
+    const existing = await this.prisma.rdi_project_annual_snapshots.findFirst({
+      where: { project_id: projectId, base_year: baseYear },
     });
 
     if (existing) return existing;

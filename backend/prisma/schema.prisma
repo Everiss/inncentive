@@ -67,6 +67,7 @@ model companies {
   rdi_timesheet_entries      rdi_timesheet_entries[]
   tax_regregimes             tax_regregimes[]
   user_company_access        user_company_access[]
+  ia_executions              ia_executions[]
 }
 
 model company_cnaes {
@@ -178,6 +179,8 @@ model contacts {
   rdi_projects                                                  rdi_projects[]
   rdi_timesheet_entries                                         rdi_timesheet_entries[]
   user                                                          users?
+  ia_task_configs                                               ia_task_configs[]
+  ia_prompts                                                    ia_prompts[]
 }
 
 /// A contact can be linked to many companies, with a different role per link.
@@ -1674,4 +1677,86 @@ enum rdi_assets_status {
   DEPRECIADO_TOTALMENTE
   BAIXADO
   VENDIDO
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Módulo IA — Configuração e Auditoria
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Configuração de provider/model por tarefa IA (substitui ia.config.ts hardcoded)
+model ia_task_configs {
+  id               String   @id @default(uuid()) @db.VarChar(36)
+  task             String   @unique @db.VarChar(64)
+  provider         String   @db.VarChar(32)
+  model            String   @db.VarChar(64)
+  max_tokens       Int      @default(4096)
+  temperature      Float?
+  extended_thinking Boolean  @default(false)
+  thinking_budget  Int?
+  is_active        Boolean  @default(true)
+  updated_at       DateTime @updatedAt @db.DateTime(0)
+  updated_by       Int?
+  contacts         contacts? @relation(fields: [updated_by], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_ia_task_config_updater")
+
+  @@index([updated_by], map: "fk_ia_task_config_updater")
+  @@map("ia_task_configs")
+}
+
+/// Prompts versionados por tarefa (substitui switch/case no anthropic.provider.ts)
+model ia_prompts {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  task         String   @db.VarChar(64)
+  prompt_type  String   @db.VarChar(32)   // SYSTEM | TASK_INSTRUCTION
+  content      String   @db.Text
+  version      Int      @default(1)
+  is_active    Boolean  @default(true)
+  notes        String?  @db.Text
+  created_at   DateTime @default(now()) @db.Timestamp(0)
+  created_by   Int?
+  contacts     contacts? @relation(fields: [created_by], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_ia_prompt_creator")
+
+  @@unique([task, prompt_type, version], map: "uq_ia_prompt_task_type_version")
+  @@index([task, prompt_type, is_active], map: "idx_ia_prompt_active")
+  @@index([created_by], map: "fk_ia_prompt_creator")
+  @@map("ia_prompts")
+}
+
+/// Log imutável de cada execução IA (source of truth para billing)
+model ia_executions {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  task          String   @db.VarChar(64)
+  provider      String   @db.VarChar(32)
+  model         String   @db.VarChar(64)
+  status        String   @db.VarChar(16)   // SUCCESS | ERROR | TIMEOUT
+  input_tokens  Int?
+  output_tokens Int?
+  latency_ms    Int
+  cost_usd      Decimal? @db.Decimal(10, 6)
+  error_message String?  @db.Text
+  company_id    Int?
+  module        String?  @db.VarChar(64)   // imports, formpd, payroll, etc.
+  reference_id  String?  @db.VarChar(64)   // ID do item processado
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+  companies     companies? @relation(fields: [company_id], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_ia_exec_company")
+
+  @@index([task, created_at], map: "idx_ia_exec_task_date")
+  @@index([company_id, created_at], map: "idx_ia_exec_company_date")
+  @@index([created_at], map: "idx_ia_exec_date")
+  @@map("ia_executions")
+}
+
+/// Tabela de preços por modelo para cálculo de custo em ia_executions
+model ia_model_pricing {
+  id                        String    @id @default(uuid()) @db.VarChar(36)
+  provider                  String    @db.VarChar(32)
+  model                     String    @db.VarChar(64)
+  input_cost_per_1m_tokens  Decimal   @db.Decimal(10, 6)
+  output_cost_per_1m_tokens Decimal   @db.Decimal(10, 6)
+  valid_from                DateTime  @default(now()) @db.Timestamp(0)
+  valid_to                  DateTime? @db.DateTime(0)
+  notes                     String?   @db.VarChar(255)
+
+  @@unique([provider, model, valid_from], map: "uq_ia_pricing_model_date")
+  @@index([provider, model], map: "idx_ia_pricing_model")
+  @@map("ia_model_pricing")
 }

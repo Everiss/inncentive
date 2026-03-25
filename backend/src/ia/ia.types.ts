@@ -3,20 +3,32 @@
  *
  * Motor centralizado de Inteligência Artificial do sistema.
  * Suporta múltiplos providers (Anthropic, OpenAI, Gemini, Ollama)
- * via Strategy Pattern, configurável por tarefa — sem acoplamento.
+ * via Strategy Pattern, configurável por tarefa via banco de dados.
  */
 
 // ─── Providers suportados ──────────────────────────────────────────────────
 export type IaProvider = 'anthropic' | 'openai' | 'gemini' | 'ollama';
 
-// ─── Tarefas registradas (cada uma pode ter seu próprio provider/model) ────
+// ─── Tarefas registradas (cada uma tem config e prompts no banco) ──────────
 export type IaTask =
-  | 'FORMPD_EXTRACTION'        // Extrai dados do formulário FORMP&D (PDF)
-  | 'PAYROLL_EXTRACTION'       // Extrai folha de pagamento de PDF/CSV não estruturado
-  | 'NF_EXTRACTION'            // Extrai dados de Nota Fiscal (PDF/XML)
-  | 'RUBRIC_CLASSIFICATION'    // Classifica rubricas p/ elegibilidade Lei do Bem
-  | 'PROJECT_DESCRIPTION'      // Sugere descrição técnica para projetos PD&I
-  | 'TIMESHEET_CLASSIFICATION';// Classifica registros de horas por atividade PD&I
+  | 'FORMPD_EXTRACTION'         // Extrai dados do formulário FORMP&D (PDF)
+  | 'PAYROLL_EXTRACTION'        // Extrai folha de pagamento de PDF/CSV não estruturado
+  | 'NF_EXTRACTION'             // Extrai dados de Nota Fiscal (PDF/XML)
+  | 'RUBRIC_CLASSIFICATION'     // Classifica rubricas p/ elegibilidade Lei do Bem
+  | 'PROJECT_DESCRIPTION'       // Sugere descrição técnica para projetos PD&I
+  | 'TIMESHEET_CLASSIFICATION'; // Classifica registros de horas por atividade PD&I
+
+// ─── Contexto de negócio (para log de execução e billing) ─────────────────
+export interface IaExecutionContext {
+  /** ID da empresa para atribuição de custo por cliente */
+  companyId?: number;
+  /** Módulo de origem: imports | formpd | payroll | projects | etc. */
+  module?: string;
+  /** ID do registro processado (import_item_id, formpd_form_id, etc.) */
+  referenceId?: string;
+  /** Dados extras para o prompt (ano-base, CNPJ, etc.) */
+  [key: string]: any;
+}
 
 // ─── Request ao motor de IA ────────────────────────────────────────────────
 export interface IaRequest {
@@ -25,8 +37,8 @@ export interface IaRequest {
   content: string;
   /** Se o conteúdo é um PDF em base64 */
   isPdfBase64?: boolean;
-  /** Contexto adicional para o prompt (ex: ano-base, CNPJ da empresa) */
-  context?: Record<string, any>;
+  /** Contexto de negócio: usado para billing e como variáveis no prompt */
+  context?: IaExecutionContext;
   /** Força um provider específico para esta execução (opcional) */
   overrideProvider?: IaProvider;
   /** Força um modelo específico (opcional) */
@@ -42,6 +54,6 @@ export interface IaResponse {
   data: Record<string, any>;
   /** Tempo de resposta em ms */
   latencyMs: number;
-  /** Tokens consumidos (quando disponível) */
+  /** Tokens consumidos (input + output) */
   tokensUsed?: number;
 }
