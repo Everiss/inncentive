@@ -3,7 +3,7 @@ import api from '../api/api';
 import { socket } from '../api/socket';
 import {
   Server, CheckCircle2, AlertCircle, Clock, Eye, Pause, Play,
-  RefreshCw, RotateCcw, Send, GitBranch, Search, ChevronLeft, ChevronRight,
+  RefreshCw, RotateCcw, Send, GitBranch, Search, ChevronLeft, ChevronRight, PauseCircle,
 } from 'lucide-react';
 import { ImportBatchItemsModal } from './modals/ImportBatchItemsModal';
 import { ImportBatchTraceModal } from './modals/ImportBatchTraceModal';
@@ -13,7 +13,7 @@ interface ImportBatch {
   entity_type: string;
   file_name: string;
   status:
-    | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+    | 'PENDING' | 'PROCESSING' | 'PAUSED' | 'COMPLETED' | 'FAILED'
     | 'PENDING_REVIEW' | 'APPROVED' | 'DISCARDED'
     | 'CNPJ_MISMATCH' | 'COMPANY_NOT_FOUND' | 'AWAITING_COMPANY' | 'ERROR';
   total_records: number;
@@ -82,6 +82,20 @@ export default function ImportBatchesList() {
     catch (e) { console.error(e); } finally { setActionLoading(null); }
   };
 
+  const pauseBatchJob = async (batchId: number, entityType: string) => {
+    const queue = entityType?.includes('FORMPD') ? 'formpd-extraction' : 'import-cnpjs';
+    setActionLoading(`pause-job-${batchId}`);
+    try { await api.post(`/queue-admin/batches/${batchId}/pause-job?queue=${queue}`); fetchBatches(); fetchQueueStatus(); }
+    catch (e) { console.error(e); } finally { setActionLoading(null); }
+  };
+
+  const resumeBatchJob = async (batchId: number, entityType: string) => {
+    const queue = entityType?.includes('FORMPD') ? 'formpd-extraction' : 'import-cnpjs';
+    setActionLoading(`resume-job-${batchId}`);
+    try { await api.post(`/queue-admin/batches/${batchId}/resume-job?queue=${queue}`); fetchBatches(); fetchQueueStatus(); }
+    catch (e) { console.error(e); } finally { setActionLoading(null); }
+  };
+
   const requeuePending = async (batchId: number, entityType: string) => {
     const queue = entityType === 'FORMPD_AI_EXTRACTION' ? 'formpd-extraction' : 'import-cnpjs';
     setActionLoading(`requeue-${batchId}`);
@@ -136,6 +150,7 @@ export default function ImportBatchesList() {
       case 'FAILED':           return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400">Falhou</span>;
       case 'PENDING_REVIEW':   return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-400">Ag. Revisão</span>;
       case 'APPROVED':         return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400">Aprovado</span>;
+      case 'PAUSED':           return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 flex items-center gap-1.5"><PauseCircle className="w-3 h-3" /> Pausado</span>;
       case 'DISCARDED':        return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">Descartado</span>;
       case 'CNPJ_MISMATCH':    return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400">CNPJ Divergente</span>;
       case 'COMPANY_NOT_FOUND': return <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">Empresa N/C</span>;
@@ -276,6 +291,8 @@ export default function ImportBatchesList() {
                   const isError   = batch.status === 'FAILED' || batch.status === 'ERROR' || batch.status === 'CNPJ_MISMATCH';
                   const isFormpd  = batch.entity_type?.includes('FORMPD');
                   const isCnpj    = ['COMPANIES','CONTACTS','COLLABORATORS','PROJECTS'].includes(batch.entity_type);
+                  const canPause  = isFormpd && (batch.status === 'PENDING' || batch.status === 'PROCESSING');
+                  const canResume = isFormpd && batch.status === 'PAUSED';
 
                   return (
                     <tr key={batch.id} className="hover:bg-blue-50/50 dark:hover:bg-slate-800/30 transition-colors">
@@ -323,6 +340,26 @@ export default function ImportBatchesList() {
                           >
                             <GitBranch className="w-4 h-4" />
                           </button>
+                          {canPause && (
+                            <button
+                              onClick={() => pauseBatchJob(batch.id, batch.entity_type)}
+                              disabled={!!actionLoading}
+                              className="p-2 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/20 rounded-lg transition-colors disabled:opacity-50"
+                              title="Pausar este lote (remove da fila)"
+                            >
+                              <PauseCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canResume && (
+                            <button
+                              onClick={() => resumeBatchJob(batch.id, batch.entity_type)}
+                              disabled={!!actionLoading}
+                              className="p-2 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-lg transition-colors disabled:opacity-50"
+                              title="Retomar este lote"
+                            >
+                              <Play className="w-4 h-4" />
+                            </button>
+                          )}
                           {(isCnpj || isFormpd) && (
                             <>
                               <button

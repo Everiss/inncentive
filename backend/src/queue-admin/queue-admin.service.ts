@@ -146,6 +146,91 @@ export class QueueAdminService {
     };
   }
 
+  /**
+   * Pauses a specific batch job by removing it from the queue and marking
+   * the batch as PAUSED. Works for waiting jobs (not yet active).
+   * Active jobs (currently processing) are moved to failed so they stop.
+   */
+  async pauseBatchJob(batchId: number, queueName: SupportedQueue = 'formpd-extraction') {
+    const queue = this.getQueue(queueName);
+    const batch = await this.prisma.import_batches.findUnique({ where: { id: batchId } });
+    if (!batch) throw new NotFoundException('Lote não encontrado');
+
+    // Search waiting and active jobs for this batch
+    const [waitingJobs, activeJobs] = await Promise.all([
+      queue.getWaiting(),
+      queue.getActive(),
+    ]);
+    const allJobs = [...waitingJobs, ...activeJobs];
+    const batchJob = allJobs.find(j => j.data?.batchId === batchId);
+
+    if (batchJob) {
+      await batchJob.remove();
+    }
+
+    await this.prisma.import_batches.update({
+      where: { id: batchId },
+      data: { status: 'PAUSED', updated_at: new Date() },
+    });
+
+    return { success: true, batchId, message: 'Lote pausado. Job removido da fila.' };
+  }
+
+  /**
+   * Resumes a paused FORMPD batch by reconstructing the job data from the
+   * batch record and re-adding it to the queue.
+   */
+  async resumeBatchJob(batchId: number, queueName: SupportedQueue = 'formpd-extraction') {
+    const queue = this.getQueue(queueName);
+    const batch = await this.prisma.import_batches.findUnique({ where: { id: batchId } });
+    if (!batch) throw new NotFoundException('Lote não encontrado');
+    if (batch.status !== 'PAUSED') {
+      throw new BadRequestException(`Lote #${batchId} não está pausado (status: ${batch.status}).`);
+    }
+
+    if (queueName === 'formpd-extraction') {
+      if (!batch.file_id) throw new BadRequestException('Lote sem file_id — não é possível retomar.');
+
+      // Reconstruct job data from file hub tables
+      const fileRow = await (this.prisma as any).files.findUnique({
+        where: { id: batch.file_id },
+        select: { id: true, storage_key: true, sha256: true },
+      });
+      if (!fileRow) throw new BadRequestException('Arquivo original não encontrado.');
+
+      const intake = await (this.prisma as any).file_intakes.findFirst({
+        where: { file_id: batch.file_id },
+        orderBy: { created_at: 'desc' },
+        select: { id: true, file_id: true },
+      });
+
+      const fileJob = intake ? await (this.prisma as any).file_jobs.findFirst({
+        where: { intake_id: intake.id, job_type: 'FORMPD_EXTRACTION' },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+      }) : null;
+
+      await queue.add('extract-pdf', {
+        batchId: batch.id,
+        filePath: fileRow.storage_key,
+        sourceCompanyId: batch.company_id ?? null,
+        fileHash: fileRow.sha256,
+        fileId: fileRow.id,
+        intakeId: intake?.id ?? null,
+        fileJobId: fileJob?.id ?? null,
+      }, { attempts: 3, backoff: { type: 'fixed', delay: 5000 } });
+    } else {
+      throw new BadRequestException(`Resume automático não suportado para a fila ${queueName}.`);
+    }
+
+    await this.prisma.import_batches.update({
+      where: { id: batchId },
+      data: { status: 'PENDING', updated_at: new Date() },
+    });
+
+    return { success: true, batchId, message: 'Lote retomado e reenfileirado.' };
+  }
+
   async retryFailed(batchId: number, queueName: SupportedQueue = 'import-cnpjs') {
     const queue = this.getQueue(queueName);
     const batch = await this.prisma.import_batches.findUnique({ where: { id: batchId } });

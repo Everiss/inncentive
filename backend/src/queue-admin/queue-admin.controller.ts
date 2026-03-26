@@ -20,6 +20,22 @@ export class QueueAdminController {
     return this.queueAdminService.resumeQueue(name);
   }
 
+  @Post('batches/:id/pause-job')
+  async pauseBatchJob(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('queue') queue?: 'import-cnpjs' | 'formpd-extraction',
+  ) {
+    return this.queueAdminService.pauseBatchJob(id, queue ?? 'formpd-extraction');
+  }
+
+  @Post('batches/:id/resume-job')
+  async resumeBatchJob(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('queue') queue?: 'import-cnpjs' | 'formpd-extraction',
+  ) {
+    return this.queueAdminService.resumeBatchJob(id, queue ?? 'formpd-extraction');
+  }
+
   @Post('batches/:id/requeue-pending')
   async requeuePending(
     @Param('id', ParseIntPipe) id: number,
