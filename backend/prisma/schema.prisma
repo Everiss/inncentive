@@ -557,6 +557,46 @@ model formpd_projects {
   is_continuous                  Boolean                          @default(false)
   start_date                     DateTime?                        @db.Date
   end_date                       DateTime?                        @db.Date
+  category                       String?                          @db.VarChar(50)
+  item_number                    Int?
+  external_id                    Int?
+  version_number                 Int?
+  knowledge_area                 String?                          @db.VarChar(255)
+  keywords_1                     String?                          @db.MediumText
+  keywords_2                     String?                          @db.MediumText
+  keywords_3                     String?                          @db.MediumText
+  keywords_4                     String?                          @db.MediumText
+  keywords_5                     String?                          @db.MediumText
+  innovative_element             String?                          @db.MediumText
+  innovative_challenge           String?                          @db.MediumText
+  innovative_problem             String?                          @db.MediumText
+  expected_result                String?                          @db.MediumText
+  project_justification          String?                          @db.MediumText
+  innovation_risk                String?                          @db.MediumText
+  expected_impact                String?                          @db.MediumText
+  external_partnerships          String?                          @db.MediumText
+  strategic_alignment            String?                          @db.MediumText
+  is_collaborative               Boolean                          @default(false)
+  economic_result_obtained       String?                          @db.MediumText
+  innovation_result_obtained     String?                          @db.MediumText
+  methodology                    String?                          @db.MediumText
+  additional_info                String?                          @db.MediumText
+  continuous_activity_base_year  String?                          @db.MediumText
+  economic_result_objective      String?                          @db.MediumText
+  innovation_result_objective    String?                          @db.MediumText
+  research_line_linkage          String?                          @db.MediumText
+  area_code                      Int?
+  nature_code                    Int?
+  pb_pa_or_de                    Int?
+  justification                  String?                          @db.MediumText
+  trl_initial                    Int?
+  trl_final                      Int?
+  sdg_codes                      String?                          @db.VarChar(500)
+  sdg_justification              String?                          @db.MediumText
+  area_is_other                  Boolean                          @default(false)
+  area_other_description         String?                          @db.VarChar(500)
+  specific_area                  String?                          @db.VarChar(500)
+  extraction_source              String                           @default("AI") @db.VarChar(20)
   previous_years_info            String?                          @db.Text
   aligns_public_policy           Boolean?                         @default(false)
   public_policy_ref              String?                          @db.VarChar(500)

@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:5000/imports/batches?entityType=FORMPD_AI_EXTRACTION)",
+      "Bash(curl -s http://localhost:5000/imports/batches/9/trace)",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s \"http://localhost:5000/imports/batches/9/items?page=1&limit=5\")",
+      "Bash(curl -sv http://localhost:5000/imports/batches/9/trace)",
+      "Bash(curl -s http://localhost:5000/imports/batches/8/trace)",
+      "Bash(curl -s \"http://localhost:5000/imports/file-jobs/fa8e779f-e8c6-4093-94cb-13d21bb0689a/trace\")",
+      "Bash(curl -s \"http://localhost:5000/imports/batches/9/items\")",
+      "Bash(curl -s -X POST http://localhost:5000/imports/formpd/batches/9/approve)",
+      "Bash(curl -s \"http://localhost:5000/forms?companyId=768\")",
+      "Bash(npx prisma:*)",
+      "Bash(node -e \":*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl -s -X POST http://localhost:5000/imports/batches/11/reprocess)",
+      "Bash(f:/development/new-tax/backend/prisma/migrations/20260325_import_items_mediumtext/migration.sql:*)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\(''''dependencies'''',{}\\),**d.get\\(''''devDependencies'''',{}\\)}.items\\(\\) if any\\(x in k for x in [''''pdf'''',''''ocr'''',''''sharp'''',''''canvas'''',''''tesseract'''']\\)]\")",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''pdf-lib''\\); console.log\\(''pdf-lib ok''\\)\")",
+      "Bash(tasklist /FI 'IMAGENAME eq node.exe')",
+      "Bash(grep -r \"Processamentos\\\\|ProcessingQueue\\\\|Lotes de Carga\\\\|import_batches\" f:/development/new-tax/frontend/src --include=*.tsx -l)"
+    ]
+  }
+}

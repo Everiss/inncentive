@@ -40,6 +40,7 @@ export class ImportsService {
     private readonly notificationsGateway: NotificationsGateway,
     @InjectQueue('import-cnpjs') private readonly importCnpjsQueue: Queue,
     @InjectQueue('formpd-extraction') private readonly formpdQueue: Queue,
+    @InjectQueue('formpd-deterministic') private readonly formpdDeterministicQueue: Queue,
     private readonly fileHubService: FileHubService,
   ) {}
 
@@ -687,7 +688,7 @@ export class ImportsService {
       idempotencyKey: `formpd:${intake.fileId}:v1`,
     });
 
-    await this.formpdQueue.add('extract-pdf', {
+    await this.formpdDeterministicQueue.add('extract-deterministic', {
       batchId: batch.id,
       filePath: file.path,
       sourceCompanyId: sourceCompanyId ?? null,
@@ -700,7 +701,7 @@ export class ImportsService {
       backoff: { type: 'fixed', delay: 5000 },
     });
 
-    this.notificationsGateway.sendProgress({ current: 0, total: 1, message: `PDF enviado para processamento por IA.` });
+    this.notificationsGateway.sendProgress({ current: 0, total: 1, message: `PDF enviado para extração determinística.` });
 
     return {
       success: true,
@@ -887,11 +888,42 @@ export class ImportsService {
           form_id: form.id,
           title: proj.title || 'Sem título',
           description: proj.description || '',
+          category: proj.category ?? null,
+          item_number: proj.item_number ?? null,
           is_continuous: proj.is_continuous ?? false,
           tech_area_code: proj.tech_area_code ?? null,
-          tech_area_label: proj.tech_area_label ?? null,
+          tech_area_label: proj.tech_area_label ?? proj.knowledge_area ?? null,
+          knowledge_area: proj.knowledge_area ?? proj.tech_area_label ?? null,
           start_date: proj.start_date ? new Date(proj.start_date) : null,
           end_date: proj.end_date ? new Date(proj.end_date) : null,
+          keywords_1: proj.keywords_1 ?? null,
+          keywords_2: proj.keywords_2 ?? null,
+          keywords_3: proj.keywords_3 ?? null,
+          keywords_4: proj.keywords_4 ?? null,
+          keywords_5: proj.keywords_5 ?? null,
+          innovative_element: proj.innovative_element ?? null,
+          innovative_challenge: proj.innovative_challenge ?? null,
+          innovative_problem: proj.innovative_problem ?? null,
+          expected_result: proj.expected_result ?? null,
+          project_justification: proj.project_justification ?? null,
+          innovation_risk: proj.innovation_risk ?? null,
+          expected_impact: proj.expected_impact ?? null,
+          external_partnerships: proj.external_partnerships ?? null,
+          strategic_alignment: proj.strategic_alignment ?? null,
+          is_collaborative: proj.is_collaborative ?? false,
+          methodology: proj.methodology ?? null,
+          additional_info: proj.additional_info ?? null,
+          economic_result_objective: proj.economic_result_objective ?? null,
+          innovation_result_objective: proj.innovation_result_objective ?? null,
+          research_line_linkage: proj.research_line_linkage ?? null,
+          trl_initial: proj.trl_initial ?? null,
+          trl_final: proj.trl_final ?? null,
+          sdg_codes: proj.sdg_codes ?? null,
+          sdg_justification: proj.sdg_justification ?? null,
+          area_is_other: proj.area_is_other ?? false,
+          area_other_description: proj.area_other_description ?? null,
+          specific_area: proj.specific_area ?? null,
+          extraction_source: proj.extraction_source ?? 'AI',
         },
       });
 

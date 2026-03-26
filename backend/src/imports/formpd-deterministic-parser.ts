@@ -25,6 +25,17 @@ export interface DetProjectSummary {
   item: number;
   title: string;
   total_amount: number | null;
+  description: string | null;
+  category: string | null;        // PESQUISA_BASICA | PESQUISA_APLICADA | DESENVOLVIMENTO_EXPERIMENTAL | INOVACAO_TECNOLOGICA
+  knowledge_area: string | null;
+  keywords_1: string | null;
+  is_continuous: boolean | null;
+  start_date: string | null;      // YYYY-MM-DD
+  end_date: string | null;        // YYYY-MM-DD
+  methodology: string | null;
+  innovative_element: string | null;
+  innovative_problem: string | null;
+  expected_result: string | null;
 }
 
 export interface DeterministicFormpdData {
@@ -49,6 +60,26 @@ function parseBRL(raw: string): number | null {
   const clean = raw.replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.').trim();
   const n = parseFloat(clean);
   return isNaN(n) ? null : n;
+}
+
+// ── Date helpers ─────────────────────────────────────────────────────────────
+
+function parseDateBR(raw: string): string | null {
+  const m = raw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+// ── Category mapping ─────────────────────────────────────────────────────────
+
+function mapCategory(raw: string | null): string | null {
+  if (!raw) return null;
+  const n = raw.toLowerCase();
+  if (n.includes('b') && n.includes('sica')) return 'PESQUISA_BASICA';
+  if (n.includes('aplicada')) return 'PESQUISA_APLICADA';
+  if (n.includes('experimental') || n.includes('desenvolvimento')) return 'DESENVOLVIMENTO_EXPERIMENTAL';
+  if (n.includes('inova')) return 'INOVACAO_TECNOLOGICA';
+  return null;
 }
 
 // ── CNPJ ────────────────────────────────────────────────────────────────────
@@ -112,6 +143,49 @@ function extractFiscalLoss(text: string): { loss: boolean | null; amount: number
   return { loss, amount };
 }
 
+// ── Project section parsing ──────────────────────────────────────────────────
+
+function extractProjectSections(text: string): Partial<DetProjectSummary>[] {
+  // Split by project section headers: "PROGRAMA/ATIVIDADES DE PD&I - N"
+  const sectionRegex = /PROGRAMA\/ATIVIDADES\s+DE\s+PD&I\s*-\s*(\d+)/gi;
+  const positions: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = sectionRegex.exec(text)) !== null) positions.push(m.index);
+  if (positions.length === 0) return [];
+
+  const sections: Partial<DetProjectSummary>[] = [];
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i];
+    const end = i + 1 < positions.length ? positions[i + 1] : start + 15000;
+    const section = text.slice(start, end);
+
+    // Extract labeled fields
+    const get = (pattern: RegExp) => { const r = section.match(pattern); return r ? r[1].trim() : null; };
+
+    const rawType = get(/TIPO\s+DE\s+ATIVIDADE[^:]*:\s*([^\n\r]+)/i)
+                 ?? get(/NATUREZA\s+DO\s+PROJETO[^:]*:\s*([^\n\r]+)/i);
+    const category = mapCategory(rawType);
+
+    const rawStart = get(/DATA\s+DE\s+IN[IÍ]CIO[^:]*:\s*(\d{2}\/\d{2}\/\d{4})/i);
+    const rawEnd   = get(/DATA\s+DE\s+T[EÉ]RMINO[^:]*:\s*(\d{2}\/\d{2}\/\d{4})/i);
+
+    sections.push({
+      description: get(/DESCRI[CÇ][ÃA]O\s+DO\s+PROJETO[^:]*:\s*([\s\S]+?)(?=\n[A-ZÁÉÍÓÚ]{3,}[^a-z]|\n--)/i),
+      category,
+      knowledge_area: get(/[ÁA]REA\s+TECNOL[OÓ]GICA[^:]*:\s*([^\n\r]+)/i),
+      keywords_1:     get(/PALAVRAS?[\s-]CHAVE[^:]*:\s*([^\n\r]+)/i),
+      is_continuous:  (() => { const v = get(/ATIVIDADE\s+CONT[IÍ]NUA[^:]*:\s*(\w+)/i); return v ? /sim|yes|true|1/i.test(v) : null; })(),
+      start_date:     rawStart ? parseDateBR(rawStart) : null,
+      end_date:       rawEnd   ? parseDateBR(rawEnd)   : null,
+      methodology:    get(/METODOLOGIA[^:]*:\s*([\s\S]+?)(?=\n[A-ZÁÉÍÓÚ]{3,}[^a-z]|\n--)/i),
+      innovative_element: get(/ELEMENTO\s+INOVADOR[^:]*:\s*([\s\S]+?)(?=\n[A-ZÁÉÍÓÚ]{3,}[^a-z]|\n--)/i),
+      innovative_problem: get(/PROBLEMA\s+(?:TECNOL[OÓ]GICO|INOVADOR)[^:]*:\s*([\s\S]+?)(?=\n[A-ZÁÉÍÓÚ]{3,}[^a-z]|\n--)/i),
+      expected_result:    get(/RESULTADO\s+ESPERADO[^:]*:\s*([\s\S]+?)(?=\n[A-ZÁÉÍÓÚ]{3,}[^a-z]|\n--)/i),
+    });
+  }
+  return sections;
+}
+
 // ── Project summary table ────────────────────────────────────────────────────
 
 function extractProjectSummary(text: string): DetProjectSummary[] {
@@ -121,54 +195,78 @@ function extractProjectSummary(text: string): DetProjectSummary[] {
     ...text.matchAll(/ITEM\/T[IÍ]TULO\s+DO\s+PROJETO[^:]*:\s*(\d+)\.\s*([^\n\r]+)/gi),
   ];
 
+  let baseSummaries: Pick<DetProjectSummary, 'item' | 'title' | 'total_amount'>[];
+
   if (detailHeaders.length > 0) {
-    return detailHeaders.map((m) => ({
+    baseSummaries = detailHeaders.map((m) => ({
       item: parseInt(m[1], 10),
       title: m[2].trim(),
       total_amount: null, // per-project total extracted from summary table below
     }));
+  } else {
+    // Fallback: parse the summary table lines.
+    // Multi-line titles are common (pdf-parse wraps long lines), so we collect
+    // pending item lines and flush when the R$ value appears.
+    const tableStart = text.search(/Item\s+Nome\s+Atividade|PROGRAMA\/ATIVIDADE\s+DE\s+PD&I/i);
+    if (tableStart === -1) return [];
+
+    const tableSection = text.slice(tableStart, tableStart + 3000);
+    const lines = tableSection.split(/\n/);
+    const fallback: Pick<DetProjectSummary, 'item' | 'title' | 'total_amount'>[] = [];
+    let pendingItem: number | null = null;
+    let pendingTitle = '';
+
+    for (const line of lines) {
+      if (/^\s*Total\s+R\$/i.test(line) && fallback.length > 0) break;
+
+      // Line starts with item number — begin accumulating title
+      const startM = line.match(/^\s*(\d+)\s+(.+)/);
+      if (startM && !line.includes('R$')) {
+        pendingItem = parseInt(startM[1], 10);
+        pendingTitle = startM[2].trim();
+        continue;
+      }
+
+      // Line contains R$ value — either continuation of pending item or standalone
+      if (line.includes('R$') && pendingItem !== null) {
+        const valueM = line.match(/R\$\s*([\d.,]+)/);
+        const amount = valueM ? parseBRL(valueM[1]) : null;
+        // Title: pendingTitle + optional prefix from this line before R$
+        const linePrefix = line.replace(/R\$.*$/, '').trim();
+        // Strip trailing keyword token (one word, no spaces)
+        let fullTitle = pendingTitle + (linePrefix ? ' ' + linePrefix : '');
+        const kwStrip = fullTitle.match(/^(.+?)\s+\S+$/);
+        if (kwStrip) fullTitle = kwStrip[1].trim();
+        fallback.push({ item: pendingItem, title: fullTitle, total_amount: amount });
+        pendingItem = null;
+        pendingTitle = '';
+      }
+    }
+    baseSummaries = fallback;
   }
 
-  // Fallback: parse the summary table lines.
-  // Multi-line titles are common (pdf-parse wraps long lines), so we collect
-  // pending item lines and flush when the R$ value appears.
-  const tableStart = text.search(/Item\s+Nome\s+Atividade|PROGRAMA\/ATIVIDADE\s+DE\s+PD&I/i);
-  if (tableStart === -1) return [];
+  // Extract per-section details and merge
+  const sections = extractProjectSections(text);
 
-  const tableSection = text.slice(tableStart, tableStart + 3000);
-  const lines = tableSection.split(/\n/);
-  const projects: DetProjectSummary[] = [];
-  let pendingItem: number | null = null;
-  let pendingTitle = '';
-
-  for (const line of lines) {
-    if (/^\s*Total\s+R\$/i.test(line) && projects.length > 0) break;
-
-    // Line starts with item number — begin accumulating title
-    const startM = line.match(/^\s*(\d+)\s+(.+)/);
-    if (startM && !line.includes('R$')) {
-      pendingItem = parseInt(startM[1], 10);
-      pendingTitle = startM[2].trim();
-      continue;
-    }
-
-    // Line contains R$ value — either continuation of pending item or standalone
-    if (line.includes('R$') && pendingItem !== null) {
-      const valueM = line.match(/R\$\s*([\d.,]+)/);
-      const amount = valueM ? parseBRL(valueM[1]) : null;
-      // Title: pendingTitle + optional prefix from this line before R$
-      const linePrefix = line.replace(/R\$.*$/, '').trim();
-      // Strip trailing keyword token (one word, no spaces)
-      let fullTitle = pendingTitle + (linePrefix ? ' ' + linePrefix : '');
-      const kwStrip = fullTitle.match(/^(.+?)\s+\S+$/);
-      if (kwStrip) fullTitle = kwStrip[1].trim();
-      projects.push({ item: pendingItem, title: fullTitle, total_amount: amount });
-      pendingItem = null;
-      pendingTitle = '';
-    }
-  }
-
-  return projects;
+  return baseSummaries.map((base, idx) => {
+    const sec = sections[idx] ?? {};
+    return {
+      item: base.item,
+      title: base.title,
+      total_amount: base.total_amount,
+      description: sec.description ?? null,
+      category: sec.category ?? null,
+      knowledge_area: sec.knowledge_area ?? null,
+      keywords_1: sec.keywords_1 ?? null,
+      is_continuous: sec.is_continuous ?? null,
+      start_date: sec.start_date ?? null,
+      end_date: sec.end_date ?? null,
+      methodology: sec.methodology ?? null,
+      innovative_element: sec.innovative_element ?? null,
+      innovative_problem: sec.innovative_problem ?? null,
+      expected_result: sec.expected_result ?? null,
+    };
+  });
 }
 
 // ── Totals ───────────────────────────────────────────────────────────────────

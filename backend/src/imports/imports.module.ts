@@ -4,6 +4,7 @@ import { ImportsController } from './imports.controller';
 import { ImportsService } from './imports.service';
 import { ImportsProcessor } from './imports.processor';
 import { FormpdExtractionProcessor } from './formpd-extraction.processor';
+import { FormpdDeterministicProcessor } from './formpd-deterministic.processor';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ConfigService } from '@nestjs/config';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -28,12 +29,16 @@ import { FileHubModule } from '../file-hub/file-hub.module';
     BullModule.registerQueue({
       name: 'formpd-extraction',
     }),
+    BullModule.registerQueue({
+      name: 'formpd-deterministic',
+    }),
   ],
   controllers: [ImportsController],
   providers: [
-    ImportsService, 
-    ImportsProcessor, 
+    ImportsService,
+    ImportsProcessor,
     FormpdExtractionProcessor,
+    FormpdDeterministicProcessor,
     ConfigService
   ],
   exports: [ImportsService],
