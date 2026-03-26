@@ -12,6 +12,91 @@ def _norm(value: str) -> str:
     return re.sub(r"\s+", " ", _strip_accents((value or "").upper())).strip()
 
 
+def _is_noise_line(line: str) -> bool:
+    n = _norm(line)
+    if not n:
+        return True
+    noise_markers = (
+        "MINISTERIO DA CIENCIA",
+        "GERADO EM",
+        "PAGINA:",
+        "OBSERVACOES:",
+        "APRESENTACAO:",
+        "ORIENTACOES",
+    )
+    return any(m in n for m in noise_markers)
+
+
+def _extract_marked_option(lines: list[str], start_idx: int, max_lookahead: int = 8) -> str | None:
+    option_re = re.compile(r"^\(\s*([OX])\s*\)\s*(.+)$", re.IGNORECASE)
+    for j in range(start_idx, min(len(lines), start_idx + max_lookahead)):
+        line = lines[j].strip()
+        if not line:
+            continue
+        m = option_re.match(line)
+        if m and m.group(1).upper() == "O":
+            return m.group(2).strip()
+    return None
+
+
+def _pick_value_for_question(
+    question: str,
+    lines: list[str],
+    i: int,
+    numbered_item_re: re.Pattern[str],
+) -> tuple[str, int]:
+    q_norm = _norm(question)
+
+    # Legacy layouts (2017/2018/2021) use "( O ) Option" lines
+    # only for choice-based questions.
+    choice_question = any(
+        key in q_norm
+        for key in (
+            "TIPO DE ORGANISMO",
+            "TIPO DE EMPRESA",
+            "SITUACAO DA EMPRESA",
+            "BENEFICIA DOS INCENTIVOS",
+            "ORIGEM DO CAPITAL CONTROLADOR",
+            "RELACAO COM O GRUPO",
+            "FECHOU COM PREJUIZO FISCAL",
+            "FECHOU O ANO-BASE COM PREJUIZO FISCAL",
+        )
+    )
+    if choice_question:
+        marked = _extract_marked_option(lines, i + 1)
+        if marked:
+            return marked, i
+
+    max_lookahead = 16
+    for j in range(i + 1, min(len(lines), i + 1 + max_lookahead)):
+        nxt = lines[j].strip()
+        if not nxt:
+            continue
+        if "?" in nxt or numbered_item_re.match(nxt):
+            break
+        if _is_noise_line(nxt):
+            continue
+
+        # Employee count: ignore noisy text and keep first numeric answer.
+        if "NUMERO TOTAL DE FUNCIONARIOS" in q_norm or "TOTAL DE FUNCIONARIOS COM VINCULO" in q_norm:
+            if re.match(r"^\d{1,7}$", nxt):
+                return nxt, j
+            continue
+
+        # Revenue values are often represented as plain numeric/currency lines.
+        if "RECEITA" in q_norm:
+            if re.match(r"^(?:R\$\s*)?\d[\d\.\,]*$", nxt, re.IGNORECASE):
+                return nxt, j
+            continue
+
+        if _is_section_header(nxt):
+            break
+
+        return nxt, j
+
+    return "", i
+
+
 def _extract_block(text: str) -> list[str]:
     lines = [ln.strip() for ln in text.splitlines()]
     start_idx = None
@@ -87,7 +172,11 @@ def _map_field_key(question: str) -> str:
         return "net_revenue"
     if "TOTAL DE FUNCIONARIOS COM VINCULO" in q:
         return "employee_count_with_contract"
-    if "FECHOU O ANO-BASE COM PREJUIZO FISCAL" in q or "FECHOU COM PREJUIZO FISCAL" in q:
+    if (
+        "FECHOU O ANO-BASE COM PREJUIZO FISCAL" in q
+        or "FECHOU COM PREJUIZO FISCAL" in q
+        or "FECHOU EM PREJUIZO FISCAL" in q
+    ):
         return "closed_year_with_tax_loss"
     if "FORMA DE APURACAO DO IRPJ E DA CSLL" in q:
         return "irpj_csll_apportionment"
@@ -167,11 +256,11 @@ def parse_company_identification(text: str) -> dict:
                 or "ESTRUTURA ORGANIZACIONAL DE PD" in q_norm
             )
 
-            if not value and i + 1 < len(block_lines):
-                nxt = block_lines[i + 1]
-                if "?" not in nxt and not numbered_item_re.match(nxt):
-                    value = nxt.strip()
-                    i += 1
+            if not value:
+                picked, consumed_idx = _pick_value_for_question(question, block_lines, i, numbered_item_re)
+                if picked:
+                    value = picked
+                    i = max(i, consumed_idx)
 
             if is_long:
                 buffer = [value] if value else []
@@ -185,6 +274,9 @@ def parse_company_identification(text: str) -> dict:
                         break
                     if _is_section_header(nxt):
                         break
+                    if _is_noise_line(nxt):
+                        j += 1
+                        continue
                     buffer.append(nxt)
                     j += 1
                 value = " ".join(v for v in buffer if v).strip()
@@ -205,4 +297,3 @@ def parse_company_identification(text: str) -> dict:
         "qa": qa,
         "raw_text": "\n".join(block_lines),
     }
-
