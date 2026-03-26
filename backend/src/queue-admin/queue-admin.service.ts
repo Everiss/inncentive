@@ -200,7 +200,7 @@ export class QueueAdminService {
 
       const intake = await (this.prisma as any).file_intakes.findFirst({
         where: { file_id: batch.file_id },
-        orderBy: { created_at: 'desc' },
+        orderBy: { id: 'desc' },
         select: { id: true, file_id: true },
       });
 

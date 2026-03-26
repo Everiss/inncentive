@@ -30,7 +30,14 @@ const MAX_TEXT_CHARS_PER_CHUNK = 40_000;
 
 type ParsedPdfText = { text: string; numpages: number };
 
-@Processor('formpd-extraction')
+// Lock duration must exceed the maximum expected job duration.
+// A 142-page PDF with 4 parallel Anthropic chunks can take ~5–8 minutes.
+// Set to 15 minutes with a stall check every 5 minutes.
+@Processor('formpd-extraction', {
+  lockDuration:    15 * 60 * 1000, // 15 min
+  stalledInterval:  5 * 60 * 1000, //  5 min
+  maxStalledCount: 1,
+})
 export class FormpdExtractionProcessor extends WorkerHost {
   private readonly logger = new Logger(FormpdExtractionProcessor.name);
 
