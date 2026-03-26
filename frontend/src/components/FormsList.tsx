@@ -130,9 +130,10 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
   const fetchPendingBatches = useCallback(async () => {
     try {
       const res = await api.get('/imports/batches', {
-        params: { entityType: 'FORMPD_AI_EXTRACTION' },
+        params: { entityType: 'FORMPD_AI_EXTRACTION', limit: 200 },
       });
-      const pending = (res.data as any[]).filter(b =>
+      const rows: any[] = res.data.data ?? res.data;
+      const pending = rows.filter(b =>
         ['PENDING_REVIEW', 'COMPANY_NOT_FOUND', 'AWAITING_COMPANY'].includes(b.status)
       );
       setPendingBatches(pending);
@@ -150,10 +151,11 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
   const openBatchReview = useCallback(async (batchId: number) => {
     try {
       const [batchRes, itemsRes] = await Promise.all([
-        api.get('/imports/batches', { params: { entityType: 'FORMPD_AI_EXTRACTION' } }),
+        api.get('/imports/batches', { params: { entityType: 'FORMPD_AI_EXTRACTION', limit: 200 } }),
         api.get(`/imports/batches/${batchId}/items`),
       ]);
-      const batch = batchRes.data.find((b: any) => b.id === batchId);
+      const batchRows: any[] = batchRes.data.data ?? batchRes.data;
+      const batch = batchRows.find((b: any) => b.id === batchId);
       const item = itemsRes.data.data?.[0];
       if (!item) { toast.error('Dados não disponíveis.'); return; }
 
