@@ -360,15 +360,36 @@ export class FormpdExtractionProcessor extends WorkerHost {
     const withCompany = results.find(r => r?.company_info?.cnpj) ?? results[0];
     const withSummary = [...results].reverse().find(r => r?.fiscal_summary) ?? results[results.length - 1];
 
-    const seen = new Set<string>();
-    const projects: any[] = [];
+    // Merge representatives — deduplicate by CPF, then by name
+    const reprByCpf = new Map<string, any>();
+    const reprByName = new Map<string, any>();
+    for (const result of results) {
+      for (const rep of result?.representatives ?? []) {
+        if (!rep?.name) continue;
+        const cpf = rep.cpf?.replace(/\D/g, '') || null;
+        if (cpf && !reprByCpf.has(cpf)) { reprByCpf.set(cpf, rep); continue; }
+        const nameKey = rep.name.trim().toLowerCase();
+        if (!reprByName.has(nameKey)) reprByName.set(nameKey, rep);
+      }
+    }
+    const representatives = [...reprByCpf.values(), ...reprByName.values()];
+
+    // Merge projects — deduplicate by title, merge sub-arrays from multiple chunks
+    const projByTitle = new Map<string, any>();
     for (const result of results) {
       for (const project of result?.projects ?? []) {
         if (!project?.title) continue;
         const key = project.title.trim().toLowerCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          projects.push(project);
+        if (!projByTitle.has(key)) {
+          projByTitle.set(key, { ...project });
+        } else {
+          // Merge sub-arrays from subsequent chunks
+          const existing = projByTitle.get(key);
+          for (const field of ['human_resources', 'expenses', 'equipment', 'partners', 'patents'] as const) {
+            if (Array.isArray(project[field]) && project[field].length > 0) {
+              existing[field] = [...(existing[field] ?? []), ...project[field]];
+            }
+          }
         }
       }
     }
@@ -378,7 +399,8 @@ export class FormpdExtractionProcessor extends WorkerHost {
       fiscal_year: withCompany?.fiscal_year ?? null,
       fiscal_loss: withCompany?.fiscal_loss ?? false,
       fiscal_loss_amount: withCompany?.fiscal_loss_amount ?? null,
-      projects,
+      representatives,
+      projects: [...projByTitle.values()],
       fiscal_summary: withSummary?.fiscal_summary ?? null,
     };
   }

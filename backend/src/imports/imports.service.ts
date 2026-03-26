@@ -913,6 +913,109 @@ export class ImportsService {
           },
         });
       }
+
+      // Equipment (bens do ativo utilizados no projeto)
+      for (const eq of proj.equipment ?? []) {
+        if (!eq?.description) continue;
+        const origin = eq.origin === 'IMPORTADO' ? 'IMPORTADO' : 'NACIONAL';
+        await (this.prisma as any).formpd_project_equipment.create({
+          data: {
+            project_id: createdProj.id,
+            description: String(eq.description).substring(0, 500),
+            origin,
+            ncm_code: eq.ncm_code ?? null,
+            quantity: eq.quantity ? Number(eq.quantity) : null,
+            unit_amount: eq.unit_amount ?? 0,
+            total_amount: eq.total_amount ?? null,
+            acquisition_date: eq.acquisition_date ? new Date(eq.acquisition_date) : null,
+            supplier_cnpj: eq.supplier_cnpj ?? null,
+          },
+        });
+      }
+
+      // Partners (instituições parceiras — ICT, universidades, cooperadoras)
+      const VALID_PARTNER_TYPES = new Set([
+        'EMPRESA_COOPERADORA', 'EMPRESA_COMPARTILHOU_CUSTOS',
+        'UNIVERSIDADE_ICT', 'INVENTOR_INDEPENDENTE', 'MICRO_EPP',
+      ]);
+      for (const pt of proj.partners ?? []) {
+        if (!pt?.name) continue;
+        const partnerType = VALID_PARTNER_TYPES.has(pt.partner_type) ? pt.partner_type : 'EMPRESA_COOPERADORA';
+        await (this.prisma as any).formpd_project_partners.create({
+          data: {
+            project_id: createdProj.id,
+            name: String(pt.name).substring(0, 255),
+            cnpj_cpf: pt.cnpj_cpf ?? null,
+            partner_type: partnerType,
+            role: pt.role ?? null,
+            shared_amount: pt.shared_amount ?? null,
+          },
+        });
+      }
+
+      // Patents / PI (propriedade intelectual gerada pelo projeto)
+      const VALID_ASSET_TYPES = new Set([
+        'PATENTE', 'MODELO_UTILIDADE', 'DESENHO_INDUSTRIAL', 'MARCA', 'SOFTWARE', 'OUTRO_INTANGIVEL',
+      ]);
+      for (const pat of proj.patents ?? []) {
+        if (!pat?.title) continue;
+        const assetType = VALID_ASSET_TYPES.has(pat.asset_type) ? pat.asset_type : 'OUTRO_INTANGIVEL';
+        await (this.prisma as any).formpd_project_patents.create({
+          data: {
+            project_id: createdProj.id,
+            title: String(pat.title).substring(0, 500),
+            asset_type: assetType,
+            registration_number: pat.registration_number ?? null,
+            registry_office: pat.registry_office ?? null,
+            filing_date: pat.filing_date ? new Date(pat.filing_date) : null,
+            grant_date: pat.grant_date ? new Date(pat.grant_date) : null,
+            amount: pat.amount ?? null,
+          },
+        });
+      }
+    }
+
+    // Representatives (signatários do formulário) — find or create contact, then link
+    const VALID_PROFILE_TYPES = new Set(['REPRESENTANTE_CORPORATIVO', 'RESPONSAVEL_PREENCHIMENTO']);
+    for (const rep of formData.representatives ?? []) {
+      if (!rep?.name) continue;
+      try {
+        const cleanCpf = rep.cpf?.replace(/\D/g, '') || null;
+        let contactId: number | null = null;
+
+        // 1. Try to find existing contact by CPF (unique index)
+        if (cleanCpf) {
+          const existing = await this.prisma.contacts.findUnique({
+            where: { cpf: rep.cpf },
+            select: { id: true },
+          });
+          if (existing) contactId = existing.id;
+        }
+
+        // 2. If not found, create a minimal contact record
+        if (!contactId) {
+          const created = await this.prisma.contacts.create({
+            data: {
+              name: String(rep.name).substring(0, 255),
+              cpf: rep.cpf ?? null,
+              email: rep.email ?? null,
+            },
+          });
+          contactId = created.id;
+        }
+
+        const profileType = VALID_PROFILE_TYPES.has(rep.profile_type)
+          ? rep.profile_type
+          : 'REPRESENTANTE_CORPORATIVO';
+
+        await (this.prisma as any).formpd_form_representatives.upsert({
+          where: { form_id_contact_id: { form_id: form.id, contact_id: contactId } },
+          update: { profile_type: profileType, is_active: true },
+          create: { form_id: form.id, contact_id: contactId, profile_type: profileType },
+        });
+      } catch (e: any) {
+        this.logger.warn(`approveBatch: falha ao salvar representante "${rep.name}": ${e.message}`);
+      }
     }
 
     // Upsert formpd_fiscal_incentives from fiscal_summary
