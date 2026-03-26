@@ -4,7 +4,7 @@ import { formatCnpj } from '../lib/utils';
 import {
   Building2, ArrowLeft, MapPin, Mail, Phone, Calendar, DollarSign,
   FileText, Users, Shield, RefreshCw, Tag, Globe, Briefcase,
-  Contact, Truck, FolderKanban, Target, ClipboardList, FileUp, BrainCircuit
+  Contact, Truck, FolderKanban, Target, ClipboardList, BrainCircuit
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ImportCompaniesModal } from './modals/ImportCompaniesModal';
@@ -287,20 +287,8 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
   }
 
   const renderTab = () => {
-    const showImport = activeTab === 'contatos' || activeTab === 'colaboradores';
-    
     return (
       <div className="flex flex-col gap-4">
-        {showImport && (
-          <div className="flex justify-end">
-            <button
-               onClick={() => setIsImportModalOpen(true)}
-               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-600/20 transition-all"
-            >
-              <FileUp className="w-4 h-4" /> Importar {activeTab === 'contatos' ? 'Contatos' : 'Colaboradores'}
-            </button>
-          </div>
-        )}
         
         {(() => {
           switch (activeTab) {

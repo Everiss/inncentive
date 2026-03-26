@@ -11,6 +11,7 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { CollaboratorsModule } from '../collaborators/collaborators.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { BullModule } from '@nestjs/bullmq';
+import { FileHubModule } from '../file-hub/file-hub.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { BullModule } from '@nestjs/bullmq';
     ContactsModule,
     CollaboratorsModule,
     ProjectsModule,
+    FileHubModule,
     BullModule.registerQueue({
       name: 'import-cnpjs',
     }),

@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 import { parseReceitaWSPhones } from '../common/phone-parser.util';
 import { ProjectsService } from '../projects/projects.service';
 import * as fs from 'fs';
+import { FileHubService } from '../file-hub/file-hub.service';
 
 @Processor('import-cnpjs', {
   concurrency: 1, 
@@ -26,12 +27,13 @@ export class ImportsProcessor extends WorkerHost {
     private readonly collaboratorsService: CollaboratorsService,
     private readonly projectsService: ProjectsService,
     private readonly configService: ConfigService,
+    private readonly fileHubService: FileHubService,
   ) {
     super();
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
-    const { itemId, batchId } = job.data;
+    const { itemId, batchId, fileId, intakeId, fileJobId } = job.data;
     let isSuccess = false;
     let errorMsg: string | null = null;
 
@@ -39,6 +41,9 @@ export class ImportsProcessor extends WorkerHost {
     const batch = await this.prisma.import_batches.findUnique({ where: { id: batchId } });
     if (batch?.status === 'PENDING') {
       await this.prisma.import_batches.update({ where: { id: batchId }, data: { status: 'PROCESSING' } });
+      if (fileId && fileJobId) {
+        await this.fileHubService.markJobStarted(fileId, fileJobId, intakeId ?? null);
+      }
     }
 
     try {
@@ -84,13 +89,18 @@ export class ImportsProcessor extends WorkerHost {
         where: { id: itemId },
         data: { status: isSuccess ? 'SUCCESS' : 'ERROR', error_message: errorMsg }
       });
-      await this.updateBatchProgress(batchId);
+      await this.updateBatchProgress(batchId, fileId, intakeId, fileJobId);
     }
 
     return { isSuccess };
   }
 
-  private async updateBatchProgress(batchId: number) {
+  private async updateBatchProgress(
+    batchId: number,
+    fileId?: string,
+    intakeId?: string,
+    fileJobId?: string,
+  ) {
     const batch = await this.prisma.import_batches.findUnique({ where: { id: batchId } });
     const itemsStatus = await this.prisma.import_items.groupBy({
       by: ['status'],
@@ -114,7 +124,25 @@ export class ImportsProcessor extends WorkerHost {
       }
     });
 
+    if (fileId && fileJobId && (processed % 5 === 0 || processed >= total)) {
+      await this.fileHubService.markJobProgress(fileId, fileJobId, processed, total, intakeId ?? null);
+    }
+
     if (updated.status === 'COMPLETED') {
+      if (fileId && fileJobId) {
+        await this.fileHubService.addArtifact(fileJobId, 'IMPORT_BATCH_SUMMARY', {
+          batchId,
+          successCount,
+          errorCount,
+          total,
+        });
+        await this.fileHubService.markJobCompleted(fileId, fileJobId, intakeId ?? null, {
+          batchStatus: updated.status,
+          successCount,
+          errorCount,
+          total,
+        });
+      }
       this.notificationsGateway.sendCompleted({ success: successCount, failed: errorCount, total });
     } else if (processed % 5 === 0) { 
       this.notificationsGateway.sendProgress({ current: processed, total, message: `Processando lote ${batchId}...` });
@@ -148,7 +176,7 @@ export class ImportsProcessor extends WorkerHost {
       const parseBrDecimal = (str?: string): number | null => {
         if (!str) return null;
         // ReceitaWS returns capital_social as standard decimal ("1658292882.00"),
-        // not Brazilian format — parse directly without stripping dots.
+        // not Brazilian format â€” parse directly without stripping dots.
         const n = parseFloat(str.replace(',', '.'));
         return isNaN(n) ? null : n;
       };
@@ -257,7 +285,7 @@ export class ImportsProcessor extends WorkerHost {
       companyId = company?.id;
     }
 
-    if (!companyId) throw new Error('Vínculo com empresa obrigatório.');
+    if (!companyId) throw new Error('VÃ­nculo com empresa obrigatÃ³rio.');
 
     await this.contactsService.upsertContactComplete({
       name,
@@ -283,7 +311,7 @@ export class ImportsProcessor extends WorkerHost {
       companyId = company?.id;
     }
 
-    if (!companyId) throw new Error('Vínculo com empresa obrigatório.');
+    if (!companyId) throw new Error('VÃ­nculo com empresa obrigatÃ³rio.');
 
     const contact = await this.contactsService.upsertContactComplete({
       name,
@@ -323,7 +351,7 @@ export class ImportsProcessor extends WorkerHost {
       companyId = company?.id;
     }
 
-    if (!companyId) throw new Error('Vínculo com empresa obrigatório.');
+    if (!companyId) throw new Error('VÃ­nculo com empresa obrigatÃ³rio.');
 
     await (this.projectsService as any).create({
       name,
@@ -387,7 +415,15 @@ export class ImportsProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('failed')
-  onFailed(job: Job, error: Error) {
+  async onFailed(job: Job, error: Error) {
+    const { fileId, intakeId, fileJobId } = (job?.data ?? {}) as {
+      fileId?: string;
+      intakeId?: string;
+      fileJobId?: string;
+    };
+    if (fileId && fileJobId) {
+      await this.fileHubService.markJobFailed(fileId, fileJobId, error.message, intakeId ?? null);
+    }
     this.logger.error(`Job ${job.id} failed: ${error.message}`);
   }
 }

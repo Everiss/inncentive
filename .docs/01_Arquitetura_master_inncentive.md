@@ -57,3 +57,62 @@ Este módulo é protegido por chaves `ON DELETE RESTRICT` (A "Caixa Preta" fisca
 * **Imutabilidade:** O ID `snapshot_id` é o bloqueio central. Nenhuma query de `DELETE` ou `UPDATE` deve ser permitida pelo backend em entidades atreladas a um Snapshot com `snapshot_status = 'FECHADO'`.
 * **Unique Keys (Duplicidade):** Capture erros `ER_DUP_ENTRY` e retorne `HTTP 409 Conflict` (Ex: tentar criar duas obrigações iguais para o mesmo mês na tabela `company_obligations`).
 * **Tratamento de Decimais:** O sistema lida extensivamente com `DECIMAL(18,2)` (moeda) e `DECIMAL(7,4)` (percentuais). Garanta que bibliotecas ORM (ex: Prisma, TypeORM) estejam convertendo esses valores para `number` ou bibliotecas como `decimal.js` no frontend, evitando perda de precisão flutuante do JavaScript.
+---
+
+## 7. FileHub (Rastreabilidade Unificada de Arquivos)
+Foi adicionado um backbone unificado para ingestão, deduplicação e auditoria de arquivos:
+
+* `files`: registro canônico por hash `sha256` (dedup global de conteúdo).
+* `file_intakes`: cada recebimento/upload de arquivo com status operacional.
+* `file_jobs`: ciclo do processamento (queued, processing, done, error) e progresso (`progress_current`/`progress_total`).
+* `file_artifacts`: saídas versionadas por job (JSON consolidado, resumo de lote, etc).
+* `file_events`: trilha imutável de eventos para auditoria temporal.
+
+Integrações de domínio:
+* `import_batches.file_id` conecta lote ao arquivo canônico.
+* `import_items.file_job_id` conecta item ao job de processamento.
+* `ia_executions.file_job_id` conecta execuções de IA ao job.
+
+---
+
+## 8. Fila Redis: Módulo de Administração
+Foi criado `QueueAdminModule` para governança operacional das filas BullMQ.
+
+Rotas principais:
+* `GET /queue-admin/queues/:name/status`
+* `POST /queue-admin/queues/:name/pause`
+* `POST /queue-admin/queues/:name/resume`
+* `POST /queue-admin/batches/:id/requeue-pending`
+* `POST /queue-admin/batches/:id/retry-failed`
+
+Filas suportadas:
+* `import-cnpjs`
+* `formpd-extraction`
+
+---
+
+## 9. Deduplicação por Hash
+### FORMP&D (PDF + IA)
+* Hash `sha256` é calculado no upload.
+* Busca cache por `file_sha256` em extrações anteriores.
+* Em hit: novo lote é preenchido sem nova chamada de IA.
+
+### Planilhas (`COMPANIES`, `CONTACTS`, `COLLABORATORS`, `PROJECTS`)
+* Hash `sha256` é calculado no upload.
+* Se houver lote `COMPLETED` para o mesmo `file_id`/conteúdo:
+  * clone de itens/status para o novo lote;
+  * sem reenfileirar processamento;
+  * evento de dedup registrado no FileHub.
+
+---
+
+## 10. Observabilidade de Trace (Backend + Frontend)
+Novas rotas de rastreabilidade:
+* `GET /imports/batches/:id/trace`
+* `GET /imports/file-jobs/:id/trace`
+
+Componente de UI em Processamentos:
+* Timeline por lote com filtros por `event_type`, `job_status` e período.
+* Destaque visual de eventos de falha.
+* Exportação de trilha: `JSON`, `JSON Full` e `CSV`.
+* Ação de copiar JSON para clipboard.

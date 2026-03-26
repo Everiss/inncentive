@@ -4,13 +4,16 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { IaService } from '../ia/ia.service';
+import { FileHubService } from '../file-hub/file-hub.service';
 import * as fs from 'fs';
 import * as path from 'path';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = require('pdf-parse');
+const pdfParseLib = require('pdf-parse');
 
-/** Max characters per AI call — ~20K tokens, leaves room for system prompt and output. */
+/** Max characters per AI call â€” ~20K tokens, leaves room for system prompt and output. */
 const MAX_CHARS_PER_CHUNK = 80_000;
+
+type ParsedPdfText = { text: string; numpages: number };
 
 @Processor('formpd-extraction')
 export class FormpdExtractionProcessor extends WorkerHost {
@@ -20,13 +23,14 @@ export class FormpdExtractionProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly notificationsGateway: NotificationsGateway,
     private readonly iaService: IaService,
+    private readonly fileHubService: FileHubService,
   ) {
     super();
   }
 
   async process(job: Job<any>): Promise<any> {
-    const { batchId, filePath, sourceCompanyId } = job.data;
-    this.logger.log(`Starting IA extraction for Batch ${batchId} (FORMP&D) — sourceCompanyId=${sourceCompanyId ?? 'none'}`);
+    const { batchId, filePath, sourceCompanyId, fileHash, fileId, intakeId, fileJobId } = job.data;
+    this.logger.log(`Starting IA extraction for Batch ${batchId} (FORMP&D) â€” sourceCompanyId=${sourceCompanyId ?? 'none'}`);
 
     try {
       await this.prisma.import_batches.update({
@@ -34,43 +38,70 @@ export class FormpdExtractionProcessor extends WorkerHost {
         data: { status: 'PROCESSING' },
       });
 
+      if (fileId && fileJobId) {
+        await this.fileHubService.markJobStarted(fileId, fileJobId, intakeId ?? null);
+      }
+
       // 1. Read and parse PDF
-      if (!fs.existsSync(filePath)) throw new Error(`Arquivo não encontrado: ${filePath}`);
+      if (!fs.existsSync(filePath)) throw new Error(`Arquivo nÃ£o encontrado: ${filePath}`);
       const pdfBuffer = fs.readFileSync(filePath);
 
       this.logger.log(`Batch ${batchId}: extraindo texto do PDF...`);
-      const pdfData = await pdfParse(pdfBuffer);
+      const pdfData = await this.parsePdfText(pdfBuffer);
       const fullText = pdfData.text?.trim() ?? '';
 
       if (fullText.length < 100) {
         throw new Error(
-          'Não foi possível extrair texto legível do PDF. ' +
-          'Verifique se o documento não está digitalizado como imagem.',
+          'NÃ£o foi possÃ­vel extrair texto legÃ­vel do PDF. ' +
+          'Verifique se o documento nÃ£o estÃ¡ digitalizado como imagem.',
         );
       }
 
       this.logger.log(
-        `Batch ${batchId}: ${fullText.length} chars (${pdfData.numpages} páginas). ` +
+        `Batch ${batchId}: ${fullText.length} chars (${pdfData.numpages} pÃ¡ginas). ` +
         `Modo: ${fullText.length <= MAX_CHARS_PER_CHUNK ? 'single-call' : 'chunked'}`,
       );
 
+      const isChunked = fullText.length > MAX_CHARS_PER_CHUNK;
+      const chunks = isChunked ? this.splitText(fullText, MAX_CHARS_PER_CHUNK) : [fullText];
+      const totalSteps = chunks.length;
+
+      await this.prisma.import_batches.update({
+        where: { id: batchId },
+        data: {
+          total_records: totalSteps,
+          processed_records: 0,
+          success_count: 0,
+          error_count: 0,
+          status: 'PROCESSING',
+          updated_at: new Date(),
+        },
+      });
+
+      this.notificationsGateway.sendProgress({
+        current: 0,
+        total: totalSteps,
+        message: `FORMP&D IA lote ${batchId}: iniciando extraÃ§Ã£o (${isChunked ? `${totalSteps} trechos` : 'documento Ãºnico'})`,
+      });
+
       // 2. Extract via AI
-      const extractedData = fullText.length <= MAX_CHARS_PER_CHUNK
-        ? await this.extractSingle(fullText)
-        : await this.extractChunked(fullText, batchId);
+      const extractedData = isChunked
+        ? await this.extractChunked(chunks, batchId, fileId, fileJobId, intakeId)
+        : await this.extractSingle(chunks[0], batchId, totalSteps, fileId, fileJobId, intakeId);
 
       // 3. Validate FORMPD structure
       if (!this.validateFormpdStructure(extractedData)) {
-        this.logger.warn(`Batch ${batchId}: documento não é um FORMP&D válido`);
+        this.logger.warn(`Batch ${batchId}: documento nÃ£o Ã© um FORMP&D vÃ¡lido`);
         await this.saveItemAndFinish(batchId, {
-          raw: extractedData, is_valid_formpd: false, file_path: filePath,
-        }, 'INVALID_FORMPD', 'O documento enviado não foi reconhecido como um formulário FORMP&D válido.');
+          raw: extractedData, is_valid_formpd: false, file_path: filePath, file_sha256: fileHash,
+        }, 'INVALID_FORMPD', 'O documento enviado nÃ£o foi reconhecido como um formulÃ¡rio FORMP&D vÃ¡lido.');
 
         this.notificationsGateway.sendFormpdCompleted({
           batchId, status: 'INVALID_FORMPD',
           cnpjFromForm: null, companyId: null, companyName: null,
-          errorMessage: 'Documento não reconhecido como FORMP&D válido.',
+          errorMessage: 'Documento nÃ£o reconhecido como FORMP&D vÃ¡lido.',
         });
+        await this.finalizeFileJobSuccess(fileId, fileJobId, intakeId, extractedData, 'INVALID_FORMPD');
         return;
       }
 
@@ -78,7 +109,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
       const rawCnpj = extractedData?.company_info?.cnpj ?? '';
       const cnpjFromForm = rawCnpj.replace(/\D/g, '').padStart(14, '0') || null;
 
-      // ─── Flow A: Company-scoped upload (sourceCompanyId provided) ───────────
+      // â”€â”€â”€ Flow A: Company-scoped upload (sourceCompanyId provided) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (sourceCompanyId) {
         const sourceCompany = await this.prisma.companies.findUnique({
           where: { id: sourceCompanyId },
@@ -90,25 +121,26 @@ export class FormpdExtractionProcessor extends WorkerHost {
 
         if (!cnpjMatches) {
           this.logger.warn(
-            `Batch ${batchId}: CNPJ mismatch — documento=${cnpjFromForm}, empresa=${sourceCleanCnpj}`,
+            `Batch ${batchId}: CNPJ mismatch â€” documento=${cnpjFromForm}, empresa=${sourceCleanCnpj}`,
           );
           this.moveFileToRejected(filePath);
           await this.saveItemAndFinish(batchId, {
             form_data: extractedData, cnpj_from_form: cnpjFromForm,
-            company_id: sourceCompanyId, file_path: null, is_valid_formpd: true,
+            company_id: sourceCompanyId, file_path: null, file_sha256: fileHash, is_valid_formpd: true,
           }, 'CNPJ_MISMATCH',
-            `CNPJ do documento (${cnpjFromForm}) não confere com a empresa (${sourceCleanCnpj}).`);
+            `CNPJ do documento (${cnpjFromForm}) nÃ£o confere com a empresa (${sourceCleanCnpj}).`);
 
           this.notificationsGateway.sendFormpdCompleted({
             batchId, status: 'CNPJ_MISMATCH', cnpjFromForm,
             companyId: sourceCompanyId,
             companyName: sourceCompany?.legal_name ?? null,
-            errorMessage: `CNPJ do documento não confere com esta empresa.`,
+            errorMessage: `CNPJ do documento nÃ£o confere com esta empresa.`,
           });
+          await this.finalizeFileJobSuccess(fileId, fileJobId, intakeId, extractedData, 'CNPJ_MISMATCH');
           return;
         }
 
-        // CNPJ matches — ready for review
+        // CNPJ matches â€” ready for review
         await this.prisma.import_batches.update({
           where: { id: batchId },
           data: { company_id: sourceCompanyId },
@@ -116,7 +148,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
         await this.saveItemAndFinish(batchId, {
           form_data: extractedData, cnpj_from_form: cnpjFromForm,
           company_id: sourceCompanyId, company_name: sourceCompany!.legal_name,
-          file_path: filePath, is_valid_formpd: true,
+          file_path: filePath, file_sha256: fileHash, is_valid_formpd: true,
         }, 'PENDING_REVIEW', null);
 
         this.notificationsGateway.sendFormpdCompleted({
@@ -124,11 +156,12 @@ export class FormpdExtractionProcessor extends WorkerHost {
           companyId: sourceCompanyId, companyName: sourceCompany!.legal_name,
         });
 
-        this.logger.log(`Batch ${batchId}: CNPJ validado — pronto para revisão (empresa id=${sourceCompanyId})`);
+        this.logger.log(`Batch ${batchId}: CNPJ validado â€” pronto para revisÃ£o (empresa id=${sourceCompanyId})`);
+        await this.finalizeFileJobSuccess(fileId, fileJobId, intakeId, extractedData, 'PENDING_REVIEW');
         return;
       }
 
-      // ─── Flow B: Global upload (no sourceCompanyId) ──────────────────────────
+      // â”€â”€â”€ Flow B: Global upload (no sourceCompanyId) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       let companyId: number | null = null;
       let companyName: string | null = null;
 
@@ -151,27 +184,29 @@ export class FormpdExtractionProcessor extends WorkerHost {
         await this.saveItemAndFinish(batchId, {
           form_data: extractedData, cnpj_from_form: cnpjFromForm,
           company_id: companyId, company_name: companyName,
-          file_path: filePath, is_valid_formpd: true,
+          file_path: filePath, file_sha256: fileHash, is_valid_formpd: true,
         }, 'PENDING_REVIEW', null);
 
         this.notificationsGateway.sendFormpdCompleted({
           batchId, status: 'PENDING_REVIEW', cnpjFromForm, companyId, companyName,
         });
-        this.logger.log(`Batch ${batchId}: empresa encontrada (id=${companyId}) — pronto para revisão`);
+        this.logger.log(`Batch ${batchId}: empresa encontrada (id=${companyId}) â€” pronto para revisÃ£o`);
       } else {
-        // Company not in the system — ask user
+        // Company not in the system â€” ask user
         await this.saveItemAndFinish(batchId, {
           form_data: extractedData, cnpj_from_form: cnpjFromForm,
           company_id: null, company_name: null,
-          file_path: filePath, is_valid_formpd: true,
+          file_path: filePath, file_sha256: fileHash, is_valid_formpd: true,
         }, 'COMPANY_NOT_FOUND', null);
 
         this.notificationsGateway.sendFormpdCompleted({
           batchId, status: 'COMPANY_NOT_FOUND', cnpjFromForm,
           companyId: null, companyName: null,
         });
-        this.logger.log(`Batch ${batchId}: empresa CNPJ=${cnpjFromForm} não cadastrada — aguardando decisão do usuário`);
+        this.logger.log(`Batch ${batchId}: empresa CNPJ=${cnpjFromForm} nÃ£o cadastrada â€” aguardando decisÃ£o do usuÃ¡rio`);
       }
+
+      await this.finalizeFileJobSuccess(fileId, fileJobId, intakeId, extractedData, companyId ? 'PENDING_REVIEW' : 'COMPANY_NOT_FOUND');
 
     } catch (error: any) {
       this.logger.error(`IA Extraction Failed for Batch ${batchId}: ${error.message}`);
@@ -184,19 +219,78 @@ export class FormpdExtractionProcessor extends WorkerHost {
         cnpjFromForm: null, companyId: null, companyName: null,
         errorMessage: error.message,
       });
+      if (fileId && fileJobId) {
+        await this.fileHubService.markJobFailed(fileId, fileJobId, error.message, intakeId ?? null);
+      }
       throw error;
     }
   }
 
-  // ─── AI extraction helpers ──────────────────────────────────────────────────
+  /**
+   * Supports both pdf-parse v1 (function export) and v2 (PDFParse class export).
+   */
+  private async finalizeFileJobSuccess(
+    fileId: string | undefined,
+    fileJobId: string | undefined,
+    intakeId: string | undefined,
+    extractedData: any,
+    outcome: string,
+  ) {
+    if (!fileId || !fileJobId) return;
 
-  private async extractSingle(text: string): Promise<any> {
+    await this.fileHubService.addArtifact(fileJobId, 'FORMPD_EXTRACTION_RESULT', {
+      outcome,
+      extractedData,
+    });
+
+    await this.fileHubService.markJobCompleted(fileId, fileJobId, intakeId ?? null, {
+      outcome,
+    });
+  }
+  private async parsePdfText(pdfBuffer: Buffer): Promise<ParsedPdfText> {
+    // v1 style: const pdf = require('pdf-parse'); await pdf(buffer)
+    const v1Fn = typeof pdfParseLib === 'function'
+      ? pdfParseLib
+      : (typeof pdfParseLib?.default === 'function' ? pdfParseLib.default : null);
+
+    if (v1Fn) {
+      const result = await v1Fn(pdfBuffer);
+      return {
+        text: result?.text ?? '',
+        numpages: Number(result?.numpages ?? 0),
+      };
+    }
+
+    // v2 style: const { PDFParse } = require('pdf-parse'); const p = new PDFParse({ data })
+    const PDFParseCtor = pdfParseLib?.PDFParse ?? pdfParseLib?.default?.PDFParse;
+    if (typeof PDFParseCtor === 'function') {
+      const parser = new PDFParseCtor({ data: pdfBuffer });
+      try {
+        const result = await parser.getText();
+        return {
+          text: result?.text ?? '',
+          numpages: Number(result?.total ?? result?.pages?.length ?? 0),
+        };
+      } finally {
+        if (typeof parser.destroy === 'function') {
+          await parser.destroy().catch(() => undefined);
+        }
+      }
+    }
+
+    throw new Error('Biblioteca pdf-parse incompatÃ­vel: export nÃ£o suportado');
+  }
+
+  // â”€â”€â”€ AI extraction helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  private async extractSingle(text: string, batchId: number, totalSteps: number, fileId?: string, fileJobId?: string, intakeId?: string): Promise<any> {
+    this.logger.log(`Batch ${batchId}: processando trecho 1/${totalSteps}...`);
     const response = await this.iaService.execute({ task: 'FORMPD_EXTRACTION', content: text });
+    await this.updateChunkProgress(batchId, 1, totalSteps, fileId, fileJobId, intakeId);
     return response.data;
   }
 
-  private async extractChunked(text: string, batchId: number): Promise<any> {
-    const chunks = this.splitText(text, MAX_CHARS_PER_CHUNK);
+  private async extractChunked(chunks: string[], batchId: number, fileId?: string, fileJobId?: string, intakeId?: string): Promise<any> {
     this.logger.log(`Batch ${batchId}: documento dividido em ${chunks.length} trechos`);
 
     const results: any[] = [];
@@ -208,9 +302,32 @@ export class FormpdExtractionProcessor extends WorkerHost {
         chunkContext: { index: i, total: chunks.length },
       });
       results.push(response.data);
+      await this.updateChunkProgress(batchId, i + 1, chunks.length, fileId, fileJobId, intakeId);
     }
 
     return this.mergeFormpdResults(results);
+  }
+
+  private async updateChunkProgress(batchId: number, current: number, total: number, fileId?: string, fileJobId?: string, intakeId?: string) {
+    await this.prisma.import_batches.update({
+      where: { id: batchId },
+      data: {
+        processed_records: current,
+        total_records: total,
+        status: 'PROCESSING',
+        updated_at: new Date(),
+      },
+    });
+
+    if (fileId && fileJobId) {
+      await this.fileHubService.markJobProgress(fileId, fileJobId, current, total, intakeId ?? null);
+    }
+
+    this.notificationsGateway.sendProgress({
+      current,
+      total,
+      message: `FORMP&D IA lote ${batchId}: trecho ${current}/${total}`,
+    });
   }
 
   private splitText(text: string, maxChars: number): string[] {
@@ -266,7 +383,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
     };
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async saveItemAndFinish(
     batchId: number,
@@ -286,11 +403,17 @@ export class FormpdExtractionProcessor extends WorkerHost {
     const isError = status === 'INVALID_FORMPD' || status === 'CNPJ_MISMATCH';
     const batchStatus = isError ? 'ERROR' : status; // PENDING_REVIEW, COMPANY_NOT_FOUND, or ERROR
 
+    const batch = await this.prisma.import_batches.findUnique({
+      where: { id: batchId },
+      select: { total_records: true },
+    });
+    const finalProcessed = Math.max(1, Number(batch?.total_records ?? 1));
+
     await this.prisma.import_batches.update({
       where: { id: batchId },
       data: {
         status: batchStatus,
-        processed_records: 1,
+        processed_records: finalProcessed,
         success_count: isError ? 0 : 1,
         error_count: isError ? 1 : 0,
         updated_at: new Date(),
@@ -307,7 +430,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
       fs.renameSync(filePath, dest);
       this.logger.log(`Arquivo movido para rejeitados: ${dest}`);
     } catch (e: any) {
-      this.logger.warn(`Não foi possível mover arquivo para rejeitados: ${e.message}`);
+      this.logger.warn(`NÃ£o foi possÃ­vel mover arquivo para rejeitados: ${e.message}`);
     }
   }
 
@@ -324,3 +447,5 @@ export class FormpdExtractionProcessor extends WorkerHost {
     this.logger.error(`IA Job ${job.id} failed: ${error.message}`);
   }
 }
+
+

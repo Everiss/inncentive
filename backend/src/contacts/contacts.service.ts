@@ -192,6 +192,16 @@ export class ContactsService {
     return legalSuffixes.some((suffix) => upper.includes(suffix) || upper.endsWith(' ' + suffix));
   }
 
+  async getStats() {
+    const [total, withEmail, withCollaborator, withUser] = await Promise.all([
+      this.prisma.contacts.count(),
+      this.prisma.contacts.count({ where: { email: { not: null } } }),
+      this.prisma.contacts.count({ where: { collaborator: { isNot: null } } }),
+      this.prisma.contacts.count({ where: { user: { isNot: null } } }),
+    ]);
+    return { total, withEmail, withCollaborator, withUser };
+  }
+
   async findAll(params: {
     page: number;
     limit: number;

@@ -26,6 +26,11 @@ export class ContactsController {
     });
   }
 
+  @Get('stats')
+  async getStats() {
+    return this.contactsService.getStats();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.contactsService.findById(id);

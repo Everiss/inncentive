@@ -68,6 +68,8 @@ model companies {
   tax_regregimes             tax_regregimes[]
   user_company_access        user_company_access[]
   ia_executions              ia_executions[]
+  import_batches             import_batches[]
+  files                      files[]
 }
 
 model company_cnaes {
@@ -126,22 +128,31 @@ model import_batches {
   processed_records Int            @default(0)
   success_count     Int            @default(0)
   error_count       Int            @default(0)
+  company_id        Int?
+  file_id           String?        @db.VarChar(36)
   created_at        DateTime       @default(now())
   updated_at        DateTime       @default(now()) @updatedAt
   items             import_items[]
+  company           companies?     @relation(fields: [company_id], references: [id])
+  files             files?         @relation(fields: [file_id], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_import_batch_file")
+
+  @@index([file_id], map: "fk_import_batch_file")
 }
 
 model import_items {
   id            Int            @id @default(autoincrement())
   batch_id      Int
+  file_job_id   String?        @db.VarChar(36)
   record_data   String         @db.Text
   status        String         @default("PENDING") @db.VarChar(50)
   error_message String?        @db.Text
   created_at    DateTime       @default(now())
   updated_at    DateTime       @default(now()) @updatedAt
   batch         import_batches @relation(fields: [batch_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_import_items_batch")
+  file_jobs     file_jobs?     @relation(fields: [file_job_id], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_import_item_file_job")
 
   @@index([batch_id], map: "fk_import_items_batch")
+  @@index([file_job_id], map: "fk_import_item_file_job")
 }
 
 /// Central person entity. All collaborators and users MUST have a contacts record first.
@@ -181,6 +192,9 @@ model contacts {
   user                                                          users?
   ia_task_configs                                               ia_task_configs[]
   ia_prompts                                                    ia_prompts[]
+  files_files_uploaded_byTocontacts                            files[]                              @relation("files_uploaded_byTocontacts")
+  file_intakes_file_intakes_received_byTocontacts              file_intakes[]                       @relation("file_intakes_received_byTocontacts")
+  file_events_file_events_actor_contact_idTocontacts           file_events[]                        @relation("file_events_actor_contact_idTocontacts")
 }
 
 /// A contact can be linked to many companies, with a different role per link.
@@ -1734,13 +1748,16 @@ model ia_executions {
   cost_usd      Decimal? @db.Decimal(10, 6)
   error_message String?  @db.Text
   company_id    Int?
+  file_job_id   String?  @db.VarChar(36)
   module        String?  @db.VarChar(64)   // imports, formpd, payroll, etc.
   reference_id  String?  @db.VarChar(64)   // ID do item processado
   created_at    DateTime @default(now()) @db.Timestamp(0)
   companies     companies? @relation(fields: [company_id], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_ia_exec_company")
+  file_jobs     file_jobs? @relation(fields: [file_job_id], references: [id], onUpdate: NoAction, onDelete: SetNull, map: "fk_ia_exec_file_job")
 
   @@index([task, created_at], map: "idx_ia_exec_task_date")
   @@index([company_id, created_at], map: "idx_ia_exec_company_date")
+  @@index([file_job_id], map: "fk_ia_exec_file_job")
   @@index([created_at], map: "idx_ia_exec_date")
   @@map("ia_executions")
 }
@@ -1759,4 +1776,135 @@ model ia_model_pricing {
   @@unique([provider, model, valid_from], map: "uq_ia_pricing_model_date")
   @@index([provider, model], map: "idx_ia_pricing_model")
   @@map("ia_model_pricing")
+}
+
+/// Registro canônico de arquivos para deduplicação e trilha multi-módulo.
+model files {
+  id            String         @id @default(uuid()) @db.VarChar(36)
+  company_id    Int?
+  sha256        String         @unique(map: "uq_files_sha256") @db.Char(64)
+  size_bytes    BigInt?        @db.BigInt
+  mime_type     String?        @db.VarChar(120)
+  original_name String?        @db.VarChar(500)
+  extension     String?        @db.VarChar(20)
+  storage_backend String       @default("LOCAL") @db.VarChar(20)
+  storage_key   String         @db.VarChar(500)
+  storage_bucket String?       @db.VarChar(100)
+  uploaded_by   Int?
+  is_encrypted  Boolean        @default(false)
+  retention_class String?      @db.VarChar(30)
+  created_at    DateTime       @default(now()) @db.Timestamp(0)
+  deleted_at    DateTime?      @db.DateTime(0)
+  companies     companies?     @relation(fields: [company_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_files_company")
+  contacts      contacts?      @relation("files_uploaded_byTocontacts", fields: [uploaded_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_files_uploader")
+  file_intakes  file_intakes[]
+  file_jobs     file_jobs[]
+  file_events   file_events[]
+  import_batches import_batches[]
+
+  @@index([uploaded_by], map: "fk_files_uploader")
+  @@index([company_id, created_at], map: "idx_files_company_date")
+  @@index([mime_type], map: "idx_files_mime")
+  @@map("files")
+}
+
+/// Cada entrada de upload/ingestão de arquivo no sistema.
+model file_intakes {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  file_id        String      @db.VarChar(36)
+  source         String      @default("UPLOAD_UI") @db.VarChar(30)
+  source_ref     String?     @db.VarChar(100)
+  intake_status  String      @default("RECEIVED") @db.VarChar(20)
+  dedup_hit      Boolean     @default(false)
+  received_by    Int?
+  received_at    DateTime    @default(now()) @db.Timestamp(0)
+  queued_at      DateTime?   @db.DateTime(0)
+  started_at     DateTime?   @db.DateTime(0)
+  finished_at    DateTime?   @db.DateTime(0)
+  error_message  String?     @db.Text
+  files          files       @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_file_intake_file")
+  contacts       contacts?   @relation("file_intakes_received_byTocontacts", fields: [received_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_file_intake_receiver")
+  file_jobs      file_jobs[]
+  file_events    file_events[]
+
+  @@index([received_by], map: "fk_file_intake_receiver")
+  @@index([file_id], map: "idx_file_intake_file")
+  @@index([intake_status], map: "idx_file_intake_status")
+  @@index([received_at], map: "idx_file_intake_received")
+  @@map("file_intakes")
+}
+
+/// Jobs de processamento por arquivo (parse, OCR, IA, validação, etc).
+model file_jobs {
+  id                String          @id @default(uuid()) @db.VarChar(36)
+  file_id           String          @db.VarChar(36)
+  intake_id         String?         @db.VarChar(36)
+  job_type          String          @db.VarChar(50)
+  processor         String          @db.VarChar(50)
+  processor_version String          @default("v1") @db.VarChar(30)
+  job_status        String          @default("QUEUED") @db.VarChar(20)
+  priority          Int             @default(5)
+  attempt           Int             @default(1)
+  progress_current  Int             @default(0)
+  progress_total    Int             @default(0)
+  idempotency_key   String?         @unique(map: "uq_file_jobs_idempotency_key") @db.VarChar(191)
+  started_at        DateTime?       @db.DateTime(0)
+  finished_at       DateTime?       @db.DateTime(0)
+  error_message     String?         @db.Text
+  created_at        DateTime        @default(now()) @db.Timestamp(0)
+  updated_at        DateTime        @default(now()) @updatedAt @db.DateTime(0)
+  files             files           @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_file_jobs_file")
+  file_intakes      file_intakes?   @relation(fields: [intake_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_file_jobs_intake")
+  file_artifacts    file_artifacts[]
+  file_events       file_events[]
+  import_items      import_items[]
+  ia_executions     ia_executions[]
+
+  @@unique([file_id, job_type, processor, processor_version], map: "uq_file_jobs_file_processor")
+  @@index([intake_id], map: "fk_file_jobs_intake")
+  @@index([file_id, created_at], map: "idx_file_jobs_file_date")
+  @@index([job_status], map: "idx_file_jobs_status")
+  @@map("file_jobs")
+}
+
+/// Artefatos/versionamento de saídas geradas por file_jobs.
+model file_artifacts {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  file_job_id      String    @db.VarChar(36)
+  artifact_type    String    @db.VarChar(40)
+  artifact_version Int       @default(1)
+  content_json     Json?
+  content_text     String?   @db.LongText
+  content_hash     String?   @db.Char(64)
+  is_valid         Boolean?
+  quality_score    Decimal?  @db.Decimal(5, 2)
+  created_at       DateTime  @default(now()) @db.Timestamp(0)
+  file_jobs        file_jobs @relation(fields: [file_job_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_file_artifact_job")
+
+  @@unique([file_job_id, artifact_type, artifact_version], map: "uq_file_artifacts_job_type_version")
+  @@index([artifact_type], map: "idx_file_artifacts_type")
+  @@map("file_artifacts")
+}
+
+/// Event log imutável para auditoria operacional de arquivos.
+model file_events {
+  id               String       @id @default(uuid()) @db.VarChar(36)
+  file_id          String       @db.VarChar(36)
+  intake_id        String?      @db.VarChar(36)
+  file_job_id      String?      @db.VarChar(36)
+  event_type       String       @db.VarChar(50)
+  event_payload    Json?
+  actor_contact_id Int?
+  event_at         DateTime     @default(now()) @db.Timestamp(0)
+  files            files        @relation(fields: [file_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_file_events_file")
+  file_intakes     file_intakes? @relation(fields: [intake_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_file_events_intake")
+  file_jobs        file_jobs?   @relation(fields: [file_job_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_file_events_job")
+  contacts         contacts?    @relation("file_events_actor_contact_idTocontacts", fields: [actor_contact_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_file_events_actor")
+
+  @@index([intake_id], map: "fk_file_events_intake")
+  @@index([file_job_id], map: "fk_file_events_job")
+  @@index([actor_contact_id], map: "fk_file_events_actor")
+  @@index([file_id, event_at], map: "idx_file_events_file_date")
+  @@index([event_type], map: "idx_file_events_type")
+  @@map("file_events")
 }

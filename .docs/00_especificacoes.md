@@ -331,3 +331,65 @@ O sistema é dividido em 8 módulos (M0–M7). O M0 é um **gateway de entrada d
 
 ---
 **Fim do Documento de Especificação.** *Agentes: Usem este esquema para estruturar os endpoints da API, restrições ORM (Foreign Keys e Enums) e arquitetura de componentes do Frontend.*
+---
+
+## 🆕 Atualizações Técnicas Recentes (Importação, Fila e Auditoria)
+
+### A) FileHub (núcleo unificado de arquivos)
+**Objetivo:** unificar rastreabilidade e deduplicação de arquivos em todos os módulos.
+
+**Novas tabelas base:**
+* `files`
+* `file_intakes`
+* `file_jobs`
+* `file_artifacts`
+* `file_events`
+
+**Vínculos de integração:**
+* `import_batches.file_id`
+* `import_items.file_job_id`
+* `ia_executions.file_job_id`
+
+### B) Deduplicação por hash
+**Regra geral:** todo arquivo recebido gera hash `sha256`.
+
+**FORMP&D (PDF):**
+* Reaproveita extração IA quando já existir `file_sha256` equivalente.
+* Evita nova chamada ao provider de IA em duplicidades.
+
+**Planilhas (COMPANIES, CONTACTS, COLLABORATORS, PROJECTS):**
+* Se já existir lote `COMPLETED` para o mesmo conteúdo, o novo lote é reutilizado.
+* Itens/status são clonados para o novo lote sem reprocessar.
+
+### C) Administração operacional da fila (Redis/BullMQ)
+**Módulo:** `QueueAdminModule`
+
+**Endpoints:**
+* `GET /queue-admin/queues/:name/status`
+* `POST /queue-admin/queues/:name/pause`
+* `POST /queue-admin/queues/:name/resume`
+* `POST /queue-admin/batches/:id/requeue-pending`
+* `POST /queue-admin/batches/:id/retry-failed`
+
+**Filas suportadas:**
+* `import-cnpjs`
+* `formpd-extraction`
+
+### D) Trace e timeline de processamento
+**Endpoints de rastreabilidade:**
+* `GET /imports/batches/:id/trace`
+* `GET /imports/file-jobs/:id/trace`
+
+**UI (Processamentos):**
+* Painel de controle da fila (status, pausa, retomada, contadores)
+* Ações por lote: reenfileirar `PENDING` e retry de `ERROR`
+* Modal de timeline com filtros por:
+  * tipo de evento
+  * status do job
+  * período (1h, 24h, 7d, tudo)
+* Exportações: `JSON`, `JSON Full`, `CSV` e cópia para clipboard
+
+### E) Regras de integridade operacional
+* Requeue manual deve preservar `batch_id` e payload original do item.
+* `retry-failed` converte `ERROR -> PENDING` antes de reenfileirar.
+* Fechamento de job no FileHub deve registrar artefato de resumo e evento final (`JOB_COMPLETED` ou `JOB_FAILED`).

@@ -12,6 +12,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ProjectsModule } from './projects/projects.module';
 import { FormpdModule } from './formpd/formpd.module';
 import { IaModule } from './ia/ia.module';
+import { QueueAdminModule } from './queue-admin/queue-admin.module';
 
 @Module({
   imports: [
@@ -31,9 +32,9 @@ import { IaModule } from './ia/ia.module';
     ProjectsModule,
     FormpdModule,
     IaModule,
+    QueueAdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-

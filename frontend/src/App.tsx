@@ -190,7 +190,7 @@ export default function App() {
 
             {activeTab === 'forms' && (
               <motion.div key="forms" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <FormsList />
+                <FormsList onSelectCompany={(id) => { setSelectedCompanyId(id); setActiveTab('empresas'); }} />
               </motion.div>
             )}
             

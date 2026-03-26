@@ -1,0 +1,20 @@
+ALTER TABLE `files` ENGINE=InnoDB;
+ALTER TABLE `file_intakes` ENGINE=InnoDB;
+ALTER TABLE `file_jobs` ENGINE=InnoDB;
+ALTER TABLE `file_artifacts` ENGINE=InnoDB;
+ALTER TABLE `file_events` ENGINE=InnoDB;
+
+ALTER TABLE `import_batches` ADD CONSTRAINT `fk_import_batch_file` FOREIGN KEY (`file_id`) REFERENCES `files`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `import_items` ADD CONSTRAINT `fk_import_item_file_job` FOREIGN KEY (`file_job_id`) REFERENCES `file_jobs`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `ia_executions` ADD CONSTRAINT `fk_ia_exec_file_job` FOREIGN KEY (`file_job_id`) REFERENCES `file_jobs`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `files` ADD CONSTRAINT `fk_files_company` FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `files` ADD CONSTRAINT `fk_files_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `contacts`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `file_intakes` ADD CONSTRAINT `fk_file_intake_file` FOREIGN KEY (`file_id`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `file_intakes` ADD CONSTRAINT `fk_file_intake_receiver` FOREIGN KEY (`received_by`) REFERENCES `contacts`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `file_jobs` ADD CONSTRAINT `fk_file_jobs_file` FOREIGN KEY (`file_id`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `file_jobs` ADD CONSTRAINT `fk_file_jobs_intake` FOREIGN KEY (`intake_id`) REFERENCES `file_intakes`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `file_artifacts` ADD CONSTRAINT `fk_file_artifact_job` FOREIGN KEY (`file_job_id`) REFERENCES `file_jobs`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `file_events` ADD CONSTRAINT `fk_file_events_file` FOREIGN KEY (`file_id`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `file_events` ADD CONSTRAINT `fk_file_events_intake` FOREIGN KEY (`intake_id`) REFERENCES `file_intakes`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `file_events` ADD CONSTRAINT `fk_file_events_job` FOREIGN KEY (`file_job_id`) REFERENCES `file_jobs`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE `file_events` ADD CONSTRAINT `fk_file_events_actor` FOREIGN KEY (`actor_contact_id`) REFERENCES `contacts`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;

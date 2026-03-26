@@ -4,7 +4,7 @@ import { socket } from '../api/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileSpreadsheet, BrainCircuit, CheckCircle2, Clock, AlertCircle,
-  RefreshCw, Eye, Building2, Calendar, TrendingUp, Sparkles,
+  RefreshCw, Eye, Calendar, TrendingUp, Sparkles,
   Bell, Loader2, ShieldCheck, X, ThumbsUp, ThumbsDown,
   Layers, DollarSign, ChevronDown, ChevronUp, ClipboardList, Users,
   HelpCircle, Send, FileClock, FileCheck,
@@ -72,6 +72,7 @@ interface ReviewItem {
   cnpjFromForm?: string | null;
   companyId?: number | null;
   companyName?: string | null;
+  hasPdf?: boolean;
 }
 
 interface PendingDecision {
@@ -104,7 +105,7 @@ const FORM_STATUS_CONFIG: Record<FormpdForm['status'], { label: string; color: s
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function FormsList() {
+export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: number) => void }) {
   const [forms, setForms] = useState<FormpdForm[]>([]);
   const [pendingBatches, setPendingBatches] = useState<PendingBatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -521,7 +522,9 @@ export default function FormsList() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-center">
-                        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
+                        <button
+                          onClick={() => onSelectCompany?.(form.company_id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
                           <Eye className="w-3.5 h-3.5" /> Abrir
                         </button>
                       </td>
@@ -575,141 +578,158 @@ export default function FormsList() {
         )}
       </AnimatePresence>
 
-      {/* ── Batch Review Modal ── */}
+      {/* ── Batch Review Modal (split-view) ── */}
       <AnimatePresence>
         {reviewItem && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-stretch bg-black/60 backdrop-blur-sm"
             onClick={() => setReviewItem(null)}
           >
-            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-auto"
+            <motion.div initial={{ scale: 0.98, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.98, opacity: 0 }}
+              className="relative flex w-full h-full"
               onClick={e => e.stopPropagation()}
             >
-              <div className="p-6 border-b border-blue-50 dark:border-slate-800 flex items-start justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-                <div>
-                  <h3 className="font-bold text-blue-900 dark:text-slate-100 text-lg flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-violet-500" /> Extração #{reviewItem.batchId}
-                  </h3>
-                  <p className="text-xs text-slate-500 truncate max-w-xs mt-0.5">{reviewItem.fileName}</p>
+              {/* ── Left: PDF preview ── */}
+              <div className="flex-1 min-w-0 bg-slate-800 flex flex-col">
+                <div className="flex items-center gap-3 px-4 py-3 bg-slate-900/80 border-b border-slate-700">
+                  <div className="w-2 h-2 rounded-full bg-violet-400" />
+                  <span className="text-xs font-mono text-slate-400 truncate">{reviewItem.fileName}</span>
                 </div>
-                <button onClick={() => setReviewItem(null)} className="w-9 h-9 rounded-xl hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors text-slate-400 flex items-center justify-center">
-                  <X className="w-4 h-4" />
-                </button>
+                <iframe
+                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/imports/formpd/batches/${reviewItem.batchId}/pdf`}
+                  className="flex-1 w-full border-none"
+                  title="FORMP&D PDF"
+                />
               </div>
 
-              <div className="p-6 flex flex-col gap-5">
-                {/* Company badge */}
-                {reviewItem.companyName ? (
-                  <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
-                    <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <div>
-                      <p className="font-bold text-emerald-700 dark:text-emerald-300 text-sm">{reviewItem.companyName}</p>
-                      {reviewItem.cnpjFromForm && <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400">{fmtCnpj(reviewItem.cnpjFromForm)}</p>}
-                    </div>
+              {/* ── Right: Review panel ── */}
+              <div className="w-[420px] shrink-0 bg-white dark:bg-slate-900 flex flex-col shadow-2xl overflow-hidden">
+                {/* Header */}
+                <div className="p-5 border-b border-blue-50 dark:border-slate-800 flex items-start justify-between">
+                  <div>
+                    <h3 className="font-bold text-blue-900 dark:text-slate-100 text-lg flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-violet-500" /> Extração #{reviewItem.batchId}
+                    </h3>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-800">
-                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">Empresa não identificada — aprovação bloqueada</p>
-                  </div>
-                )}
-
-                {/* Summary */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl">
-                    <p className="text-xs text-slate-500">Ano Fiscal</p>
-                    <p className="text-2xl font-black text-blue-900 dark:text-slate-100">{reviewItem.fiscal_year || '—'}</p>
-                  </div>
-                  <div className="p-3 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl">
-                    <p className="text-xs text-slate-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Projetos</p>
-                    <p className="text-2xl font-black text-blue-900 dark:text-slate-100">{reviewItem.projects?.length || 0}</p>
-                  </div>
-                  <div className="p-3 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl">
-                    <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Benefício</p>
-                    <p className="text-sm font-black text-emerald-700 dark:text-emerald-400">
-                      {fmt(reviewItem.fiscal_summary?.total_benefit_requested)}
-                    </p>
-                  </div>
+                  <button onClick={() => setReviewItem(null)} className="w-9 h-9 rounded-xl hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors text-slate-400 flex items-center justify-center shrink-0">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
 
-                {/* Projects */}
-                {reviewItem.projects && reviewItem.projects.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
-                      <ClipboardList className="w-4 h-4 text-blue-500" /> Projetos ({reviewItem.projects.length})
-                    </p>
-                    {reviewItem.projects.map((p: any, i: number) => {
-                      const hrTotal = p.human_resources?.reduce((s: number, hr: any) => s + (hr.annual_amount || 0), 0) ?? 0;
-                      const expTotal = p.expenses?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
-                      return (
-                        <div key={i} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-blue-50 dark:border-slate-700 overflow-hidden">
-                          <button className="w-full flex items-center justify-between p-3 text-left hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
-                            onClick={() => setExpandedProject(expandedProject === i ? null : i)}>
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 bg-blue-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xs font-black text-blue-600 shrink-0">{i + 1}</div>
-                              <div>
-                                <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{p.title}</p>
-                                <p className="text-xs text-slate-500">{CATEGORY_LABELS[p.category] || p.category}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              {hrTotal > 0 && <span className="text-xs font-bold text-blue-700 dark:text-blue-300 hidden md:block">{fmt(hrTotal)}</span>}
-                              {expTotal > 0 && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 hidden md:block">{fmt(expTotal)}</span>}
-                              {expandedProject === i ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                            </div>
-                          </button>
-                          <AnimatePresence>
-                            {expandedProject === i && (
-                              <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
-                                className="overflow-hidden border-t border-blue-50 dark:border-slate-700">
-                                <div className="p-4 grid grid-cols-2 gap-3">
-                                  {p.human_resources?.length > 0 && (
-                                    <div>
-                                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Users className="w-3 h-3" /> RH</p>
-                                      <div className="flex flex-col gap-1.5">
-                                        {p.human_resources.slice(0, 4).map((hr: any, hi: number) => (
-                                          <div key={hi} className="flex items-center justify-between p-2 bg-blue-50/50 dark:bg-slate-800 rounded-lg text-xs">
-                                            <div>
-                                              <p className="font-semibold truncate max-w-[100px]">{hr.name}</p>
-                                              {hr.role && <p className="text-slate-500">{hr.role}</p>}
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                              {hr.annual_amount && <p className="font-bold text-blue-700 dark:text-blue-300">{fmt(hr.annual_amount)}</p>}
-                                              {hr.dedication_pct && <p className="text-slate-400">{hr.dedication_pct}%</p>}
-                                            </div>
-                                          </div>
-                                        ))}
-                                        {p.human_resources.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.human_resources.length - 4}</p>}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {p.expenses?.length > 0 && (
-                                    <div>
-                                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Layers className="w-3 h-3" /> Despesas</p>
-                                      <div className="flex flex-col gap-1.5">
-                                        {p.expenses.slice(0, 4).map((exp: any, ei: number) => (
-                                          <div key={ei} className="flex items-center justify-between p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg text-xs">
-                                            <p className="text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{exp.category || exp.description}</p>
-                                            <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
-                                          </div>
-                                        ))}
-                                        {p.expenses.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.expenses.length - 4}</p>}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Scrollable content */}
+                <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+                  {/* Company badge */}
+                  {reviewItem.companyName ? (
+                    <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-emerald-700 dark:text-emerald-300 text-sm">{reviewItem.companyName}</p>
+                        {reviewItem.cnpjFromForm && <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400">{fmtCnpj(reviewItem.cnpjFromForm)}</p>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-800">
+                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">Empresa não identificada — aprovação bloqueada</p>
+                    </div>
+                  )}
 
-                {/* Actions */}
-                <div className="flex gap-3 pt-1">
+                  {/* Summary */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-3 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl">
+                      <p className="text-xs text-slate-500">Ano Fiscal</p>
+                      <p className="text-2xl font-black text-blue-900 dark:text-slate-100">{reviewItem.fiscal_year || '—'}</p>
+                    </div>
+                    <div className="p-3 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl">
+                      <p className="text-xs text-slate-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Projetos</p>
+                      <p className="text-2xl font-black text-blue-900 dark:text-slate-100">{reviewItem.projects?.length || 0}</p>
+                    </div>
+                    <div className="p-3 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl">
+                      <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Benefício</p>
+                      <p className="text-sm font-black text-emerald-700 dark:text-emerald-400">
+                        {fmt(reviewItem.fiscal_summary?.total_benefit_requested)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Projects */}
+                  {reviewItem.projects && reviewItem.projects.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-blue-500" /> Projetos ({reviewItem.projects.length})
+                      </p>
+                      {reviewItem.projects.map((p: any, i: number) => {
+                        const hrTotal = p.human_resources?.reduce((s: number, hr: any) => s + (hr.annual_amount || 0), 0) ?? 0;
+                        const expTotal = p.expenses?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
+                        return (
+                          <div key={i} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-blue-50 dark:border-slate-700 overflow-hidden">
+                            <button className="w-full flex items-center justify-between p-3 text-left hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
+                              onClick={() => setExpandedProject(expandedProject === i ? null : i)}>
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 bg-blue-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xs font-black text-blue-600 shrink-0">{i + 1}</div>
+                                <div>
+                                  <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{p.title}</p>
+                                  <p className="text-xs text-slate-500">{CATEGORY_LABELS[p.category] || p.category}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                {hrTotal > 0 && <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{fmt(hrTotal)}</span>}
+                                {expTotal > 0 && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{fmt(expTotal)}</span>}
+                                {expandedProject === i ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                              </div>
+                            </button>
+                            <AnimatePresence>
+                              {expandedProject === i && (
+                                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
+                                  className="overflow-hidden border-t border-blue-50 dark:border-slate-700">
+                                  <div className="p-4 grid grid-cols-2 gap-3">
+                                    {p.human_resources?.length > 0 && (
+                                      <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Users className="w-3 h-3" /> RH</p>
+                                        <div className="flex flex-col gap-1.5">
+                                          {p.human_resources.slice(0, 4).map((hr: any, hi: number) => (
+                                            <div key={hi} className="flex items-center justify-between p-2 bg-blue-50/50 dark:bg-slate-800 rounded-lg text-xs">
+                                              <div>
+                                                <p className="font-semibold truncate max-w-[80px]">{hr.name}</p>
+                                                {hr.role && <p className="text-slate-500">{hr.role}</p>}
+                                              </div>
+                                              <div className="text-right shrink-0">
+                                                {hr.annual_amount && <p className="font-bold text-blue-700 dark:text-blue-300">{fmt(hr.annual_amount)}</p>}
+                                                {hr.dedication_pct && <p className="text-slate-400">{hr.dedication_pct}%</p>}
+                                              </div>
+                                            </div>
+                                          ))}
+                                          {p.human_resources.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.human_resources.length - 4}</p>}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {p.expenses?.length > 0 && (
+                                      <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Layers className="w-3 h-3" /> Despesas</p>
+                                        <div className="flex flex-col gap-1.5">
+                                          {p.expenses.slice(0, 4).map((exp: any, ei: number) => (
+                                            <div key={ei} className="flex items-center justify-between p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg text-xs">
+                                              <p className="text-slate-600 dark:text-slate-400 truncate max-w-[80px]">{exp.category || exp.description}</p>
+                                              <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
+                                            </div>
+                                          ))}
+                                          {p.expenses.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.expenses.length - 4}</p>}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions — pinned at bottom */}
+                <div className="p-5 border-t border-blue-50 dark:border-slate-800 flex gap-3">
                   <button onClick={handleDiscard} disabled={discarding || approving}
                     className="flex-1 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                     {discarding ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsDown className="w-4 h-4" />} Recusar
@@ -719,7 +739,7 @@ export default function FormsList() {
                     onClick={handleApprove}
                     className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-sm shadow-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:from-emerald-600 hover:to-teal-700 transition-all">
                     {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-                    {!reviewItem.companyId ? 'Bloqueado — empresa desconhecida' : 'Aprovar e Salvar FORM'}
+                    {!reviewItem.companyId ? 'Bloqueado' : 'Aprovar e Salvar FORM'}
                   </button>
                 </div>
               </div>

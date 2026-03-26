@@ -1,9 +1,10 @@
-import { Controller, Post, Get, Delete, Param, Query, UseInterceptors, UploadedFile, BadRequestException, ParseIntPipe, Body } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Param, Query, UseInterceptors, UploadedFile, BadRequestException, ParseIntPipe, Body, Res } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImportsService } from './imports.service';
 import { memoryStorage } from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { Response } from 'express';
 
 @Controller('imports')
 export class ImportsController {
@@ -85,6 +86,12 @@ export class ImportsController {
     return this.importsService.registerCompanyForBatch(id);
   }
 
+  /** Stream the original PDF file for a FORMPD batch (for review UI). */
+  @Get('formpd/batches/:id/pdf')
+  async getBatchPdf(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    return this.importsService.streamBatchPdf(id, res);
+  }
+
   /** Discard a FORMPD batch — moves PDF to rejected folder. */
   @Post('formpd/batches/:id/discard')
   async discardBatch(@Param('id', ParseIntPipe) id: number) {
@@ -117,10 +124,20 @@ export class ImportsController {
   @Get('batches/:id/items')
   async getBatchItems(
     @Param('id', ParseIntPipe) id: number,
-    @Query('page', ParseIntPipe) page: number = 1,
-    @Query('limit', ParseIntPipe) limit: number = 20
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
   ) {
-    return this.importsService.getBatchItems(id, page, limit);
+    return this.importsService.getBatchItems(id, Number(page) || 1, Number(limit) || 20);
+  }
+
+  @Get('batches/:id/trace')
+  async getBatchTrace(@Param('id', ParseIntPipe) id: number) {
+    return this.importsService.getBatchTrace(id);
+  }
+
+  @Get('file-jobs/:id/trace')
+  async getFileJobTrace(@Param('id') id: string) {
+    return this.importsService.getFileJobTrace(id);
   }
 
   @Post('batches/:id/reprocess')

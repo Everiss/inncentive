@@ -4,7 +4,8 @@ import { formatCnpj } from '../lib/utils';
 import {
   User, Search, Mail, Phone, Building2,
   Shield, Briefcase, BadgeCheck, ChevronLeft, ChevronRight,
-  ChevronUp, ChevronDown, MoreVertical, UserPlus, Star, Lock, X, Eye, FileUp
+  ChevronUp, ChevronDown, MoreVertical, UserPlus, Star, Lock, X, Eye, FileUp,
+  Users, AtSign, KeyRound
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ImportCompaniesModal } from './modals/ImportCompaniesModal';
@@ -162,10 +163,18 @@ function ActionsMenu({ contact, onAction }: {
   );
 }
 
+interface Stats {
+  total: number;
+  withEmail: number;
+  withCollaborator: number;
+  withUser: number;
+}
+
 // ─── Main Component ───────────────────────────────────────────
 export default function ContactsList({ onSelectContact, companyId }: ContactsListProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<Stats | null>(null);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -187,6 +196,10 @@ export default function ContactsList({ onSelectContact, companyId }: ContactsLis
 
   // Expanded row
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!companyId) api.get('/contacts/stats').then(r => setStats(r.data)).catch(() => {});
+  }, [companyId]);
 
   // Debounce
   useEffect(() => {
@@ -242,8 +255,64 @@ export default function ContactsList({ onSelectContact, companyId }: ContactsLis
     </th>
   );
 
+  const statCards = [
+    {
+      label: 'Total de Contatos',
+      value: stats?.total ?? '—',
+      icon: <Users className="w-5 h-5" />,
+      color: 'text-blue-600 dark:text-blue-400',
+      bg: 'bg-blue-50 dark:bg-blue-500/10',
+      border: 'border-blue-100 dark:border-blue-500/20',
+    },
+    {
+      label: 'Com E-mail',
+      value: stats?.withEmail ?? '—',
+      sub: stats ? `${Math.round((stats.withEmail / (stats.total || 1)) * 100)}%` : null,
+      icon: <AtSign className="w-5 h-5" />,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+      border: 'border-emerald-100 dark:border-emerald-500/20',
+    },
+    {
+      label: 'Colaboradores',
+      value: stats?.withCollaborator ?? '—',
+      icon: <Briefcase className="w-5 h-5" />,
+      color: 'text-amber-600 dark:text-amber-400',
+      bg: 'bg-amber-50 dark:bg-amber-500/10',
+      border: 'border-amber-100 dark:border-amber-500/20',
+    },
+    {
+      label: 'Acesso ao Sistema',
+      value: stats?.withUser ?? '—',
+      icon: <KeyRound className="w-5 h-5" />,
+      color: 'text-violet-600 dark:text-violet-400',
+      bg: 'bg-violet-50 dark:bg-violet-500/10',
+      border: 'border-violet-100 dark:border-violet-500/20',
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
+
+      {/* ── Indicator Cards ──────────────────────────────────── */}
+      {!companyId && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {statCards.map(card => (
+            <div key={card.label} className={`rounded-2xl border ${card.border} bg-white dark:bg-slate-900 p-5 flex items-center gap-4 shadow-sm`}>
+              <div className={`w-11 h-11 rounded-xl ${card.bg} ${card.color} flex items-center justify-center shrink-0`}>
+                {card.icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">{card.label}</p>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className={`text-2xl font-bold ${card.color}`}>{card.value}</span>
+                  {card.sub && <span className="text-xs text-slate-400 dark:text-slate-500">{card.sub}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Filters Bar ─────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-blue-100 dark:border-slate-800 shadow-sm p-4 flex flex-col sm:flex-row gap-3">

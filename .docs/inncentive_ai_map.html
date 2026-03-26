@@ -220,6 +220,7 @@ const C = {
   m6:{c:'var(--coral)',d:'var(--cor-d)',b:'var(--cor-b)'},
   m7:{c:'var(--pink)',d:'var(--pnk-d)',b:'var(--pnk-b)'},
   m8:{c:'var(--acc)',d:'var(--acc-d)',b:'var(--acc-b)'},
+  m9:{c:'#8de0ff',d:'rgba(141,224,255,0.10)',b:'rgba(141,224,255,0.30)'},
 };
 
 const MODULES = [
@@ -577,6 +578,29 @@ STRUCTURED_OUT:  Todos os outputs → JSON → tabelas do schema`}},
       {t:'Governança de dados gerados por IA',d:'Todo output de IA entra com confirmed_by_human=0 e não afeta cálculos fiscais até revisão explícita. Snapshots fechados são imutáveis.',badges:['ai'],
        props:{'confirmed_by_human=0':'Todo output IA aguarda revisão humana','Promoção bloqueada':'IA não promove dados a snapshots fechados','Rastreabilidade':'ai_extraction_meta em payroll_import_jobs','Auditoria':'Histórico de sugestões e confirmações'},
        tables:['payroll_rubric_maps','payroll_import_jobs','rdi_hr_allocations','rdi_assets'],deps:[]},
+    ]
+  },
+  {
+    id:'m9', num:'M9', label:'FileHub & Filas', ck:'m9',
+    title:'FileHub unificado e controle operacional de filas',
+    sub:'Hash por arquivo, deduplicacao, parse reutilizavel, rastreabilidade por eventos e administracao da fila Redis',
+    aiNote:'Rastreabilidade em tempo real por intake/job/event',
+    steps:[
+      {t:'Intake unificado e hash de arquivo',d:'Todo upload entra pelo FileHub. O arquivo e normalizado, hashado e classificado por tipo antes de criar jobs de processamento.',badges:['import','auto'],
+       props:{Entrada:'Modal, importadores e integracoes usam o mesmo intake',Hash:'SHA-256 sobre bytes do arquivo + metadados de origem',Idempotencia:'Mesmo hash evita reprocessamento desnecessario',Rastreio:'file_intakes vincula usuario, empresa e origem'},
+       tables:['files','file_intakes'],deps:[]},
+      {t:'Deduplicacao e cache de parsing',d:'Ao detectar hash ja conhecido, o sistema reutiliza parse anterior e cria apenas novo vinculo de consumo, preservando historico e granularidade.',badges:['auto','calc'],
+       props:{Reuso:'Artefatos de parse reaproveitados por hash+parser_version',Integridade:'Nenhum overwrite de resultado aprovado',Granularidade:'Artefatos por etapa (texto, chunks, entidades, mapeamentos)',Auditoria:'Cada reaproveitamento gera evento dedicado'},
+       tables:['file_artifacts','file_events'],deps:['Intake criado']},
+      {t:'Orquestracao de jobs por estagio',d:'Cada arquivo pode gerar varios jobs (parse, extracao IA, validacao, promocao). O progresso e calculado por estagio e exibido sem ambiguidade.',badges:['auto','ai'],
+       props:{Modelo:'1 intake -> N file_jobs encadeados',Status:'PENDING, ACTIVE, WAITING, COMPLETED, FAILED, CANCELED',Progresso:'Percentual por estagio + total consolidado',Compatibilidade:'Funciona para FORMP&D, planilhas e demais importadores'},
+       tables:['file_jobs','imports_batches','imports_batch_items'],deps:['Intake e dedup concluidos']},
+      {t:'Trace detalhado e timeline operacional',d:'Endpoints de trace mostram linha do tempo completa com eventos de intake, queue e IA para acompanhamento em tempo real no frontend.',badges:['monitor','output'],
+       props:{'API batch':'GET /imports/batches/:id/trace','API job':'GET /imports/file-jobs/:id/trace',Frontend:'Timeline com filtros por tipo, severidade e origem',Exportacao:'JSON, JSON completo e CSV para auditoria'},
+       tables:['file_events','file_jobs','imports_batches'],deps:['Jobs em execucao ou concluidos']},
+      {t:'Administracao da fila Redis (Queue Admin)',d:'Modulo dedicado para reprocessar PENDING, promover WAITING, retry de FAILED e limpeza segura, com logs de quem executou cada acao.',badges:['monitor','manual'],
+       props:{Acoes:'Requeue pendentes, retry falhas, cancelar travados, drenar com seguranca',Prioridade:'Fila de IA configuravel sem bloquear importacoes criticas',Seguranca:'Permissao por perfil e trilha de auditoria',Resultado:'Recupera lotes sem perda de integridade'},
+       tables:['file_jobs','file_events','users'],deps:['Permissao administrativa']},
     ]
   },
 ];
