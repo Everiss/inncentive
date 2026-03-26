@@ -10,7 +10,8 @@ dependencies = [
   "pydantic-settings==2.10.1",
   "pymupdf==1.26.4",
   "pdfplumber==0.11.7",
-  "python-multipart==0.0.20"
+  "python-multipart==0.0.20",
+  "pymysql==1.1.1"
 ]
 
 [project.optional-dependencies]

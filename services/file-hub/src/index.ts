@@ -11,7 +11,9 @@ const port = Number(process.env.FILE_HUB_PORT || 8030);
 const dbUrl =
   process.env.FILE_HUB_DATABASE_URL ||
   'mysql://file_hub_svc:FileHubSvc%232026%21@localhost:3306/new_tax_fileserver';
-const fileServerRoot = path.resolve(process.env.FILESERVER_ROOT || path.join(process.cwd(), 'upload'));
+const fileServerRoot = path.resolve(
+  process.env.FILESERVER_ROOT || path.join(process.cwd(), '..', '..', 'upload'),
+);
 
 const pool = mysql.createPool(dbUrl);
 const app = express();
@@ -30,6 +32,19 @@ function resolveInsideRoot(relativePath: string): string {
     throw new Error('Path traversal blocked');
   }
   return resolved;
+}
+
+function normalizeToAbsoluteInsideRoot(inputPath: string): string {
+  const raw = String(inputPath || '').trim();
+  if (!raw) throw new Error('Path is required');
+  if (path.isAbsolute(raw)) {
+    const resolved = path.resolve(raw);
+    if (!resolved.startsWith(fileServerRoot)) {
+      throw new Error('Absolute path outside FILESERVER_ROOT');
+    }
+    return resolved;
+  }
+  return resolveInsideRoot(raw);
 }
 
 async function appendEvent(input: {
@@ -137,6 +152,77 @@ app.get('/files/:id', async (req, res) => {
     return res.json(rows[0]);
   } catch (error: any) {
     return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/files/:id/move', async (req, res) => {
+  const fileId = String(req.params.id || '').trim();
+  const toRelativePath = String(req.body?.toRelativePath || '').trim();
+  const actorContactId = req.body?.actorContactId !== undefined ? Number(req.body.actorContactId) : null;
+
+  if (!fileId) return res.status(400).json({ message: 'file id is required' });
+  if (!toRelativePath) return res.status(400).json({ message: 'toRelativePath is required' });
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [rows] = await conn.execute<any[]>(
+      `SELECT id, storage_key FROM files WHERE id=? LIMIT 1`,
+      [fileId],
+    );
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    const currentStorageKey = String(rows[0].storage_key || '').trim();
+    if (!currentStorageKey) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'File has empty storage_key' });
+    }
+
+    const fromPath = normalizeToAbsoluteInsideRoot(currentStorageKey);
+    const toPath = resolveInsideRoot(toRelativePath);
+
+    if (!fs.existsSync(fromPath)) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Source file not found in storage' });
+    }
+
+    if (fromPath !== toPath) {
+      fs.mkdirSync(path.dirname(toPath), { recursive: true });
+      fs.renameSync(fromPath, toPath);
+    }
+
+    await conn.execute(`UPDATE files SET storage_key=? WHERE id=?`, [toPath, fileId]);
+    await conn.execute(
+      `INSERT INTO file_events (id, file_id, event_type, event_payload, actor_contact_id, event_at)
+       VALUES (UUID(), ?, 'FILE_MOVED', ?, ?, NOW())`,
+      [
+        fileId,
+        JSON.stringify({
+          fromPath,
+          toPath,
+          toRelativePath: toRelativePath.replace(/\\/g, '/'),
+        }),
+        Number.isFinite(actorContactId as number) ? actorContactId : null,
+      ],
+    );
+
+    await conn.commit();
+    return res.json({
+      ok: true,
+      fileId,
+      storageKey: toPath,
+      fromPath,
+      toPath,
+    });
+  } catch (error: any) {
+    await conn.rollback();
+    return res.status(500).json({ message: error.message });
+  } finally {
+    conn.release();
   }
 });
 
@@ -303,9 +389,10 @@ app.post('/intakes/register-upload', async (req, res) => {
              mime_type = COALESCE(?, mime_type),
              original_name = COALESCE(?, original_name),
              extension = COALESCE(?, extension),
+             storage_key = COALESCE(?, storage_key),
              deleted_at = NULL
          WHERE id = ?`,
-        [companyId, sizeBytes, mimeType, originalName, extension, fileId],
+        [companyId, sizeBytes, mimeType, originalName, extension, filePath, fileId],
       );
     } else {
       await conn.execute(
@@ -509,5 +596,5 @@ app.post('/artifacts/upsert', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`file-hub listening on :${port} (root=${fileServerRoot})`);
+  console.log(`INFO: [file-hub] listening on :${port} (root=${fileServerRoot})`);
 });

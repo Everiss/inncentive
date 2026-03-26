@@ -87,6 +87,20 @@ export class FileHubClientService {
     } | null;
   }
 
+  async moveFile(fileId: string, toRelativePath: string, actorContactId?: number | null) {
+    const response = await axios.post(`${this.baseUrl}/files/${fileId}/move`, {
+      toRelativePath,
+      actorContactId: actorContactId ?? null,
+    });
+    return response.data as {
+      ok: boolean;
+      fileId: string;
+      storageKey: string;
+      fromPath: string;
+      toPath: string;
+    };
+  }
+
   async getLatestIntake(fileId: string, sourceRef?: string | null) {
     const response = await axios.get(`${this.baseUrl}/intakes/latest`, {
       params: { fileId, ...(sourceRef !== undefined ? { sourceRef } : {}) },
@@ -120,4 +134,3 @@ export class FileHubClientService {
     };
   }
 }
-

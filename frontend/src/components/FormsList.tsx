@@ -72,6 +72,25 @@ interface ReviewItem {
   cnpjFromForm?: string | null;
   companyId?: number | null;
   companyName?: string | null;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  needsAi?: boolean;
+  missingFields?: string[];
+  detectedFamily?: string | null;
+  submissionReceipt?: {
+    sender_name?: string | null;
+    sender_cpf?: string | null;
+    expedition_at?: string | null;
+    authenticity_code?: string | null;
+  } | null;
+  companyIdentification?: {
+    fields?: Record<string, string>;
+    qa?: Array<{ question: string; value: string }>;
+    raw_text?: string;
+  } | null;
+  companyRegistry?: {
+    fields?: Record<string, string>;
+    raw_text?: string;
+  } | null;
   hasPdf?: boolean;
 }
 
@@ -88,6 +107,58 @@ const fmt = (v?: number | null) =>
 
 const fmtCnpj = (v: string) =>
   v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+const normalizeSubmissionReceipt = (raw: any) => ({
+  sender_name: raw?.sender_name ?? raw?.senderName ?? null,
+  sender_cpf: raw?.sender_cpf ?? raw?.senderCpf ?? null,
+  expedition_at: raw?.expedition_at ?? raw?.expeditionAt ?? null,
+  authenticity_code: raw?.authenticity_code ?? raw?.authenticityCode ?? null,
+});
+
+const normalizeCompanyIdentification = (raw: any) => ({
+  fields: (raw?.fields && typeof raw.fields === 'object') ? raw.fields : {},
+  qa: Array.isArray(raw?.qa) ? raw.qa : [],
+  raw_text: raw?.raw_text ?? '',
+});
+
+const normalizeCompanyRegistry = (raw: any) => ({
+  fields: (raw?.fields && typeof raw.fields === 'object') ? raw.fields : {},
+  raw_text: raw?.raw_text ?? '',
+});
+
+const COMPANY_IDENT_LABELS: Record<string, string> = {
+  company_type: 'Tipo de Empresa',
+  company_status: 'Situação da Empresa',
+  benefits_law_11196_8248: 'Benefícios Lei 11.196/8.248',
+  capital_origin: 'Origem do Capital',
+  group_relationship: 'Relação com Grupo',
+  gross_operational_revenue: 'Receita Operacional Bruta',
+  net_revenue: 'Receita Líquida',
+  employee_count_with_contract: 'Funcionários com Vínculo',
+  closed_year_with_tax_loss: 'Fechou Ano com Prejuízo',
+  irpj_csll_apportionment: 'Apuração IRPJ/CSLL',
+  incentives_reason: 'Motivo Incentivos',
+  rnd_organizational_structure: 'Estrutura Organizacional P&D',
+};
+
+const COMPANY_REGISTRY_LABELS: Record<string, string> = {
+  situacao_na_receita: 'Situação na Receita',
+  logradouro: 'Logradouro',
+  numero: 'Número',
+  sigla: 'Sigla',
+  razao_social: 'Razão Social',
+  natureza_juridica: 'Natureza Jurídica',
+  data_fundacao: 'Data de Fundação',
+  complemento: 'Complemento',
+  tipo_endereco: 'Tipo de Endereço',
+  representante_legal: 'Representante Legal',
+  bairro: 'Bairro',
+  cnae: 'CNAE',
+  municipio: 'Município',
+  cod_postal: 'Código Postal',
+  cnpj: 'CNPJ',
+  porte_da_empresa: 'Porte da Empresa',
+};
 
 const CATEGORY_LABELS: Record<string, string> = {
   PESQUISA_BASICA: 'Pesquisa Básica',
@@ -114,6 +185,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
   const [expandedProject, setExpandedProject] = useState<number | null>(null);
   const [approving, setApproving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [enqueueingAi, setEnqueueingAi] = useState(false);
   const [pendingDecision, setPendingDecision] = useState<PendingDecision | null>(null);
   const [registering, setRegistering] = useState(false);
   const [declining, setDeclining] = useState(false);
@@ -162,6 +234,16 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
       let parsed: any = {};
       try { parsed = JSON.parse(item.record_data); } catch { /* */ }
       const formData = parsed.form_data || parsed;
+      const submissionReceipt = normalizeSubmissionReceipt(
+        parsed.submission_receipt || formData.submission_receipt || {},
+      );
+      const companyIdentification = normalizeCompanyIdentification(
+        parsed.company_identification || formData.company_identification || {},
+      );
+      const companyRegistry = normalizeCompanyRegistry(
+        parsed.company_registry || formData.company_registry || {},
+      );
+      const detectedFamily = parsed?.meta?.detected_version?.family ?? null;
 
       setReviewItem({
         batchId,
@@ -174,6 +256,13 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
         cnpjFromForm: parsed.cnpj_from_form ?? null,
         companyId: parsed.company_id ?? null,
         companyName: parsed.company_name ?? null,
+        confidence: parsed.confidence ?? null,
+        needsAi: Boolean(parsed.needs_ai),
+        missingFields: Array.isArray(parsed.missing_fields) ? parsed.missing_fields : [],
+        detectedFamily,
+        submissionReceipt,
+        companyIdentification,
+        companyRegistry,
       });
       setExpandedProject(null);
     } catch {
@@ -210,6 +299,22 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
       toast.error('Erro ao recusar: ' + (e.response?.data?.message || e.message));
     } finally {
       setDiscarding(false);
+    }
+  };
+
+  const handleEnqueueAi = async () => {
+    if (!reviewItem) return;
+    setEnqueueingAi(true);
+    try {
+      await api.post(`/imports/formpd/batches/${reviewItem.batchId}/enqueue-ai`, {
+        fields: reviewItem.missingFields || [],
+      });
+      toast.success('IA enfileirada para completar os campos faltantes.');
+      fetchPendingBatches();
+    } catch (e: any) {
+      toast.error('Erro ao enfileirar IA: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setEnqueueingAi(false);
     }
   };
 
@@ -620,6 +725,26 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
 
                 {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+                  {/* Extraction quality */}
+                  {(reviewItem.needsAi || (reviewItem.missingFields?.length ?? 0) > 0) && (
+                    <div className="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-2xl border border-violet-200 dark:border-violet-800">
+                      <p className="text-sm font-bold text-violet-700 dark:text-violet-300">IA recomendada por política</p>
+                      <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-1">
+                        Confiança: <span className="font-semibold">{reviewItem.confidence || 'N/A'}</span>
+                        {reviewItem.detectedFamily ? (
+                          <>
+                            {' '}· Família: <span className="font-mono">{reviewItem.detectedFamily}</span>
+                          </>
+                        ) : null}
+                      </p>
+                      {(reviewItem.missingFields?.length ?? 0) > 0 && (
+                        <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-2 break-words">
+                          Campos faltantes: {(reviewItem.missingFields || []).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Company badge */}
                   {reviewItem.companyName ? (
                     <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
@@ -652,6 +777,81 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                         {fmt(reviewItem.fiscal_summary?.total_benefit_requested)}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Submission receipt */}
+                  <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700">
+                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Recibo de Entrega</p>
+                    <div className="grid grid-cols-1 gap-2 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500">Remetente</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">
+                          {reviewItem.submissionReceipt?.sender_name || '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500">CPF</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-200">
+                          {reviewItem.submissionReceipt?.sender_cpf || '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500">Expedição</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">
+                          {reviewItem.submissionReceipt?.expedition_at || '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500">Código</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-200 text-right break-all">
+                          {reviewItem.submissionReceipt?.authenticity_code || '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dados Pessoa Jurídica */}
+                  <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700">
+                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Dados Pessoa Jurídica</p>
+                    {Object.keys(reviewItem.companyRegistry?.fields || {}).length > 0 ? (
+                      <div className="grid grid-cols-1 gap-2 text-xs">
+                        {Object.entries(reviewItem.companyRegistry?.fields || {}).map(([k, v]) => (
+                          <div key={k} className="flex items-start justify-between gap-3">
+                            <span className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '—')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+                    )}
+                  </div>
+
+                  {/* Identificação/Características da Empresa */}
+                  <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700">
+                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Identificação da Empresa</p>
+                    {Object.keys(reviewItem.companyIdentification?.fields || {}).length > 0 ? (
+                      <div className="grid grid-cols-1 gap-2 text-xs">
+                        {Object.entries(reviewItem.companyIdentification?.fields || {}).map(([k, v]) => (
+                          <div key={k} className="flex items-start justify-between gap-3">
+                            <span className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '—')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+                    )}
+                    {(reviewItem.companyIdentification?.qa?.length || 0) > 0 && (
+                      <div className="mt-3 pt-3 border-t border-blue-100 dark:border-slate-700 flex flex-col gap-2">
+                        {(reviewItem.companyIdentification?.qa || []).slice(0, 8).map((qa, idx) => (
+                          <div key={idx} className="text-xs">
+                            <p className="font-semibold text-slate-600 dark:text-slate-300">{qa.question}</p>
+                            <p className="text-slate-500">{qa.value || '—'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Projects */}
@@ -732,6 +932,16 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
 
                 {/* Actions — pinned at bottom */}
                 <div className="p-5 border-t border-blue-50 dark:border-slate-800 flex gap-3">
+                  {(reviewItem.needsAi || (reviewItem.missingFields?.length ?? 0) > 0) && (
+                    <button
+                      onClick={handleEnqueueAi}
+                      disabled={enqueueingAi || approving || discarding}
+                      className="flex-1 py-3 rounded-2xl border-2 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-bold text-sm hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {enqueueingAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Enfileirar IA
+                    </button>
+                  )}
                   <button onClick={handleDiscard} disabled={discarding || approving}
                     className="flex-1 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                     {discarding ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsDown className="w-4 h-4" />} Recusar

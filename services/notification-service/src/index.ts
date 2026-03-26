@@ -42,6 +42,5 @@ app.post('/events', (req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`notification-service listening on :${port}`);
+  console.log(`INFO: [notification-service] listening on :${port}`);
 });
-

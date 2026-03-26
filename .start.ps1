@@ -1,7 +1,8 @@
 param(
   [ValidateSet("all", "app", "node", "python")]
   [string]$Target = "all",
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$NoAutoKillPorts
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,7 +30,37 @@ function Start-ServiceProcess {
   Write-Host "[STARTED] $Name"
 }
 
+function Ensure-PortFree {
+  param(
+    [int]$Port,
+    [string]$ServiceName
+  )
+
+  $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+  if ($connections.Count -eq 0) {
+    return
+  }
+
+  $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+  foreach ($pid in $pids) {
+    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $procName = if ($proc) { $proc.ProcessName } else { "unknown" }
+
+    if ($NoAutoKillPorts) {
+      throw "Porta $Port em uso por PID=$pid ($procName). Pare o processo manualmente ou rode sem -NoAutoKillPorts."
+    }
+
+    if ($DryRun) {
+      Write-Host "[DRY-RUN] Encerraria PID=$pid ($procName) na porta $Port para iniciar $ServiceName"
+    } else {
+      Write-Host "[PORT] Encerrando PID=$pid ($procName) na porta $Port para iniciar $ServiceName"
+      Stop-Process -Id $pid -Force -ErrorAction Stop
+    }
+  }
+}
+
 function Start-App {
+  Ensure-PortFree -Port 5000 -ServiceName "backend"
   Start-ServiceProcess -Name "backend" -WorkingDirectory "backend" -Command "npm.cmd run start:dev"
   Start-ServiceProcess -Name "frontend" -WorkingDirectory "frontend" -Command "npm.cmd run dev"
 }

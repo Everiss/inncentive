@@ -4,8 +4,10 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  console.log('DATABASE_URL:', process.env.DATABASE_URL);
+  const port = Number(process.env.PORT ?? 5000);
+  console.log('INFO: [backend] DATABASE_URL configured');
   app.enableCors();
-  await app.listen(process.env.PORT ?? 5000);
+  await app.listen(port);
+  console.log(`INFO: [backend] listening on :${port}`);
 }
 bootstrap();

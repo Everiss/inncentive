@@ -110,6 +110,19 @@ export default function ImportBatchesList() {
     catch (e) { console.error(e); } finally { setActionLoading(null); }
   };
 
+  const reparseFormpd = async (batchId: number) => {
+    setActionLoading(`reparse-formpd-${batchId}`);
+    try {
+      await api.post(`/imports/formpd/batches/${batchId}/reparse`);
+      fetchBatches();
+      fetchQueueStatus('formpd-extraction');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // Search: debounce 400ms
   useEffect(() => {
     const t = setTimeout(() => {
@@ -293,6 +306,9 @@ export default function ImportBatchesList() {
                   const isCnpj    = ['COMPANIES','CONTACTS','COLLABORATORS','PROJECTS'].includes(batch.entity_type);
                   const canPause  = isFormpd && (batch.status === 'PENDING' || batch.status === 'PROCESSING');
                   const canResume = isFormpd && batch.status === 'PAUSED';
+                  const canReparseFormpd = isFormpd && !['PENDING', 'PROCESSING', 'PAUSED'].includes(batch.status);
+                  const canRequeuePending = isCnpj && (batch.processed_records < batch.total_records || batch.status === 'PENDING');
+                  const canRetryFailed = isCnpj && (batch.error_count > 0 || batch.status === 'FAILED' || batch.status === 'ERROR');
 
                   return (
                     <tr key={batch.id} className="hover:bg-blue-50/50 dark:hover:bg-slate-800/30 transition-colors">
@@ -360,24 +376,38 @@ export default function ImportBatchesList() {
                               <Play className="w-4 h-4" />
                             </button>
                           )}
-                          {(isCnpj || isFormpd) && (
+                          {canReparseFormpd && (
+                            <button
+                              onClick={() => reparseFormpd(batch.id)}
+                              disabled={!!actionLoading}
+                              className="p-2 text-fuchsia-600 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/20 rounded-lg transition-colors disabled:opacity-50"
+                              title="Reprocessar apenas o parse determinístico (FORMPD)"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          )}
+                          {(canRequeuePending || canRetryFailed) && (
                             <>
-                              <button
-                                onClick={() => requeuePending(batch.id, batch.entity_type)}
-                                disabled={!!actionLoading}
-                                className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
-                                title="Reenfileirar PENDING"
-                              >
-                                <Send className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => retryFailed(batch.id, batch.entity_type)}
-                                disabled={!!actionLoading}
-                                className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50"
-                                title="Reprocessar ERROR"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
+                              {canRequeuePending && (
+                                <button
+                                  onClick={() => requeuePending(batch.id, batch.entity_type)}
+                                  disabled={!!actionLoading}
+                                  className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Reenfileirar PENDING"
+                                >
+                                  <Send className="w-4 h-4" />
+                                </button>
+                              )}
+                              {canRetryFailed && (
+                                <button
+                                  onClick={() => retryFailed(batch.id, batch.entity_type)}
+                                  disabled={!!actionLoading}
+                                  className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Reprocessar ERROR"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>

@@ -396,6 +396,7 @@ model formpd_forms {
   created_at                  DateTime                        @default(now()) @db.Timestamp(0)
   updated_at                  DateTime                        @default(now()) @db.DateTime(0)
   formpd_fiscal_incentives    formpd_fiscal_incentives?
+  formpd_company_identification formpd_company_identification?
   formpd_form_representatives formpd_form_representatives[]
   companies                   companies                       @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_formpd_forms_company")
   formpd_opinions             formpd_opinions[]
@@ -403,6 +404,30 @@ model formpd_forms {
   formpd_projects             formpd_projects[]
 
   @@unique([company_id, base_year], map: "uq_company_year")
+}
+
+model formpd_company_identification {
+  id                           Int          @id @default(autoincrement())
+  form_id                      Int          @unique(map: "uq_formpd_company_identification_form")
+  company_type                 String?      @db.VarChar(100)
+  company_status               String?      @db.VarChar(100)
+  benefits_law_11196_8248      String?      @db.VarChar(100)
+  capital_origin               String?      @db.VarChar(100)
+  group_relationship           String?      @db.VarChar(100)
+  gross_operational_revenue    Decimal?     @db.Decimal(18, 2)
+  net_revenue                  Decimal?     @db.Decimal(18, 2)
+  employee_count_with_contract Int?
+  closed_year_with_tax_loss    Boolean?
+  irpj_csll_apportionment      String?      @db.VarChar(100)
+  incentives_reason            String?      @db.Text
+  rnd_organizational_structure String?      @db.Text
+  qa_json                      Json?
+  raw_text                     String?      @db.MediumText
+  created_at                   DateTime     @default(now()) @db.Timestamp(0)
+  updated_at                   DateTime     @default(now()) @updatedAt @db.DateTime(0)
+  formpd_forms                 formpd_forms @relation(fields: [form_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_formpd_company_identification_form")
+
+  @@index([form_id], map: "idx_formpd_company_identification_form")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

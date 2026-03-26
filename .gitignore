@@ -38,6 +38,7 @@ Thumbs.db
 
 # Runtime uploads
 backend/upload/
+/upload/
 
 # Python cache
 __pycache__/

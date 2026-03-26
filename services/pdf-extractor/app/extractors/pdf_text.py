@@ -1,4 +1,6 @@
-﻿import fitz
+﻿import io
+
+import fitz
 import pdfplumber
 
 
@@ -12,10 +14,7 @@ def extract_text_pymupdf(pdf_bytes: bytes) -> tuple[str, int]:
 
 def extract_text_pdfplumber(pdf_bytes: bytes) -> str:
     text_parts: list[str] = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:  # type: ignore[name-defined]
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
             text_parts.append(page.extract_text() or "")
     return "\n".join(text_parts)
-
-
-import io

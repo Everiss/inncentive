@@ -14,7 +14,9 @@ const port = Number(process.env.IMPORT_SERVICE_PORT || 8040);
 const dbUrl =
   process.env.IMPORT_SERVICE_DATABASE_URL ||
   'mysql://import_svc:ImportSvc%232026%21@localhost:3306/new_tax_imports';
-const uploadRoot = path.resolve(process.env.IMPORT_UPLOAD_ROOT || './upload/imports');
+const uploadRoot = path.resolve(
+  process.env.IMPORT_UPLOAD_ROOT || path.join(process.cwd(), '..', '..', 'upload', 'imports'),
+);
 
 fs.mkdirSync(uploadRoot, { recursive: true });
 
@@ -22,6 +24,21 @@ const pool = mysql.createPool(dbUrl);
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json({ limit: '10mb' }));
+
+function parseIntQuery(
+  value: unknown,
+  fallback: number,
+  options?: { min?: number; max?: number },
+): number {
+  const min = options?.min ?? Number.MIN_SAFE_INTEGER;
+  const max = options?.max ?? Number.MAX_SAFE_INTEGER;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.trunc(n);
+  if (i < min) return min;
+  if (i > max) return max;
+  return i;
+}
 
 function detectFileType(filename: string): 'CSV' | 'XLS' | 'XLSX' {
   const ext = path.extname(filename).toLowerCase();
@@ -232,8 +249,8 @@ app.post('/imports/upload', upload.single('file'), async (req, res) => {
 });
 
 app.get('/imports/batches', async (req, res) => {
-  const limit = Math.min(Number(req.query.limit || 200), 1000);
-  const offset = Math.max(Number(req.query.offset || 0), 0);
+  const limit = parseIntQuery(req.query.limit, 200, { min: 1, max: 1000 });
+  const offset = parseIntQuery(req.query.offset, 0, { min: 0 });
   const entityType = String(req.query.entityType || '').trim();
 
   const filters: string[] = [];
@@ -251,8 +268,8 @@ app.get('/imports/batches', async (req, res) => {
      INNER JOIN import_templates t ON t.id = b.template_id
      ${whereSql}
      ORDER BY b.created_at DESC
-     LIMIT ? OFFSET ?`,
-    [...params, limit, offset],
+     LIMIT ${limit} OFFSET ${offset}`,
+    params,
   );
   res.json(rows);
 });
@@ -272,11 +289,11 @@ app.get('/imports/batches/:id', async (req, res) => {
 });
 
 app.get('/imports/batches/:id/rows', async (req, res) => {
-  const limit = Math.min(Number(req.query.limit || 5000), 5000);
-  const offset = Math.max(Number(req.query.offset || 0), 0);
+  const limit = parseIntQuery(req.query.limit, 5000, { min: 1, max: 5000 });
+  const offset = parseIntQuery(req.query.offset, 0, { min: 0 });
   const [rows] = await pool.execute<any[]>(
-    `SELECT * FROM import_rows WHERE batch_id=? ORDER BY row_index ASC LIMIT ? OFFSET ?`,
-    [req.params.id, limit, offset],
+    `SELECT * FROM import_rows WHERE batch_id=? ORDER BY row_index ASC LIMIT ${limit} OFFSET ${offset}`,
+    [req.params.id],
   );
   res.json(rows);
 });
@@ -386,5 +403,5 @@ app.get('/imports/file-jobs/:id/trace', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`import-service listening on :${port}`);
+  console.log(`INFO: [import-service] listening on :${port}`);
 });

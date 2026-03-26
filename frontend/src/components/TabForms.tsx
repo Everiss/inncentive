@@ -47,6 +47,25 @@ interface ReviewData {
   batch: ImportBatch;
   formData: any;
   cnpjFromForm: string | null;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  needsAi?: boolean;
+  missingFields?: string[];
+  detectedFamily?: string | null;
+  submissionReceipt?: {
+    sender_name?: string | null;
+    sender_cpf?: string | null;
+    expedition_at?: string | null;
+    authenticity_code?: string | null;
+  } | null;
+  companyIdentification?: {
+    fields?: Record<string, string>;
+    qa?: Array<{ question: string; value: string }>;
+    raw_text?: string;
+  } | null;
+  companyRegistry?: {
+    fields?: Record<string, string>;
+    raw_text?: string;
+  } | null;
 }
 
 const fmt = (v?: number) =>
@@ -54,6 +73,58 @@ const fmt = (v?: number) =>
 
 const fmtCnpj = (v: string) =>
   v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+const normalizeSubmissionReceipt = (raw: any) => ({
+  sender_name: raw?.sender_name ?? raw?.senderName ?? null,
+  sender_cpf: raw?.sender_cpf ?? raw?.senderCpf ?? null,
+  expedition_at: raw?.expedition_at ?? raw?.expeditionAt ?? null,
+  authenticity_code: raw?.authenticity_code ?? raw?.authenticityCode ?? null,
+});
+
+const normalizeCompanyIdentification = (raw: any) => ({
+  fields: (raw?.fields && typeof raw.fields === 'object') ? raw.fields : {},
+  qa: Array.isArray(raw?.qa) ? raw.qa : [],
+  raw_text: raw?.raw_text ?? '',
+});
+
+const normalizeCompanyRegistry = (raw: any) => ({
+  fields: (raw?.fields && typeof raw.fields === 'object') ? raw.fields : {},
+  raw_text: raw?.raw_text ?? '',
+});
+
+const COMPANY_IDENT_LABELS: Record<string, string> = {
+  company_type: 'Tipo de Empresa',
+  company_status: 'Situação da Empresa',
+  benefits_law_11196_8248: 'Benefícios Lei 11.196/8.248',
+  capital_origin: 'Origem do Capital',
+  group_relationship: 'Relação com Grupo',
+  gross_operational_revenue: 'Receita Operacional Bruta',
+  net_revenue: 'Receita Líquida',
+  employee_count_with_contract: 'Funcionários com Vínculo',
+  closed_year_with_tax_loss: 'Fechou Ano com Prejuízo',
+  irpj_csll_apportionment: 'Apuração IRPJ/CSLL',
+  incentives_reason: 'Motivo Incentivos',
+  rnd_organizational_structure: 'Estrutura Organizacional P&D',
+};
+
+const COMPANY_REGISTRY_LABELS: Record<string, string> = {
+  situacao_na_receita: 'Situação na Receita',
+  logradouro: 'Logradouro',
+  numero: 'Número',
+  sigla: 'Sigla',
+  razao_social: 'Razão Social',
+  natureza_juridica: 'Natureza Jurídica',
+  data_fundacao: 'Data de Fundação',
+  complemento: 'Complemento',
+  tipo_endereco: 'Tipo de Endereço',
+  representante_legal: 'Representante Legal',
+  bairro: 'Bairro',
+  cnae: 'CNAE',
+  municipio: 'Município',
+  cod_postal: 'Código Postal',
+  cnpj: 'CNPJ',
+  porte_da_empresa: 'Porte da Empresa',
+};
 
 const CATEGORY_LABELS: Record<string, string> = {
   PESQUISA_BASICA: 'Pesquisa Básica',
@@ -73,6 +144,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
   const [expandedProject, setExpandedProject] = useState<number | null>(null);
   const [approving, setApproving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [enqueueingAi, setEnqueueingAi] = useState(false);
 
   const fetchBatches = useCallback(async () => {
     try {
@@ -95,11 +167,29 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
 
       let parsed: any = {};
       try { parsed = JSON.parse(item.record_data); } catch { /* */ }
+      const formData = parsed.form_data || parsed;
+      const submissionReceipt = normalizeSubmissionReceipt(
+        parsed.submission_receipt || formData.submission_receipt || {},
+      );
+      const companyIdentification = normalizeCompanyIdentification(
+        parsed.company_identification || formData.company_identification || {},
+      );
+      const companyRegistry = normalizeCompanyRegistry(
+        parsed.company_registry || formData.company_registry || {},
+      );
+      const detectedFamily = parsed?.meta?.detected_version?.family ?? null;
 
       setReview({
         batch,
-        formData: parsed.form_data || parsed,
+        formData,
         cnpjFromForm: parsed.cnpj_from_form ?? null,
+        confidence: parsed.confidence ?? null,
+        needsAi: Boolean(parsed.needs_ai),
+        missingFields: Array.isArray(parsed.missing_fields) ? parsed.missing_fields : [],
+        detectedFamily,
+        submissionReceipt,
+        companyIdentification,
+        companyRegistry,
       });
       setView('review');
     } catch {
@@ -138,6 +228,22 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
       toast.error('Erro ao descartar: ' + (e.response?.data?.message || e.message));
     } finally {
       setDiscarding(false);
+    }
+  };
+
+  const handleEnqueueAi = async () => {
+    if (!review) return;
+    setEnqueueingAi(true);
+    try {
+      await api.post(`/imports/formpd/batches/${review.batch.id}/enqueue-ai`, {
+        fields: review.missingFields || [],
+      });
+      toast.success('IA enfileirada para completar os campos faltantes.');
+      fetchBatches();
+    } catch (e: any) {
+      toast.error('Erro ao enfileirar IA: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setEnqueueingAi(false);
     }
   };
 
@@ -351,8 +457,10 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
                 setExpandedProject={setExpandedProject}
                 approving={approving}
                 discarding={discarding}
+                enqueueingAi={enqueueingAi}
                 onApprove={handleApprove}
                 onDiscard={handleDiscard}
+                onEnqueueAi={handleEnqueueAi}
               />
             ) : null}
           </motion.div>
@@ -366,7 +474,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
 // ─── Review Panel ────────────────────────────────────────────────────────────
 
 function ReviewPanel({
-  review, cnpj, expandedProject, setExpandedProject, approving, discarding, onApprove, onDiscard,
+  review, cnpj, expandedProject, setExpandedProject, approving, discarding, enqueueingAi, onApprove, onDiscard, onEnqueueAi,
 }: {
   review: ReviewData;
   cnpj: string;
@@ -374,10 +482,12 @@ function ReviewPanel({
   setExpandedProject: (i: number | null) => void;
   approving: boolean;
   discarding: boolean;
+  enqueueingAi: boolean;
   onApprove: () => void;
   onDiscard: () => void;
+  onEnqueueAi: () => void;
 }) {
-  const { formData, cnpjFromForm } = review;
+  const { formData, cnpjFromForm, submissionReceipt, companyIdentification, companyRegistry, confidence, needsAi, missingFields, detectedFamily } = review;
   const normalizedCnpj = cnpj.replace(/\D/g, '');
   const cnpjMatch = !!cnpjFromForm && cnpjFromForm === normalizedCnpj;
   const isApproved = review.batch.status === 'APPROVED';
@@ -448,6 +558,81 @@ function ReviewPanel({
             <p className="text-xs text-slate-500 mt-0.5">P&D: {fmt(formData.fiscal_summary.total_rnd_expenditure)}</p>
           )}
         </div>
+      </div>
+
+      {(needsAi || (missingFields?.length ?? 0) > 0) && (
+        <div className="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-2xl border border-violet-100 dark:border-violet-800">
+          <p className="text-sm font-bold text-violet-800 dark:text-violet-300">IA recomendada por política</p>
+          <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-1">
+            Confiança: <span className="font-semibold">{confidence || 'N/A'}</span>
+            {detectedFamily ? (
+              <>
+                {' '}· Família: <span className="font-mono">{detectedFamily}</span>
+              </>
+            ) : null}
+          </p>
+          {(missingFields?.length ?? 0) > 0 && (
+            <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-2 break-words">
+              Campos faltantes: {(missingFields || []).join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Recibo de Entrega */}
+      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
+        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Recibo de Entrega</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div>
+            <p className="text-slate-500">Remetente</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{submissionReceipt?.sender_name || '—'}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">CPF</p>
+            <p className="font-mono text-slate-700 dark:text-slate-200">{submissionReceipt?.sender_cpf || '—'}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Expedição</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{submissionReceipt?.expedition_at || '—'}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Código de Autenticidade</p>
+            <p className="font-mono text-slate-700 dark:text-slate-200 break-all">{submissionReceipt?.authenticity_code || '—'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
+        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Dados Pessoa Jurídica</p>
+        {Object.keys(companyRegistry?.fields || {}).length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {Object.entries(companyRegistry?.fields || {}).map(([k, v]) => (
+              <div key={k}>
+                <p className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</p>
+                <p className="font-semibold text-slate-700 dark:text-slate-200">{String(v || '—')}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+        )}
+      </div>
+
+      {/* Identificação/Características da Empresa */}
+      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
+        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Identificação da Empresa</p>
+        {Object.keys(companyIdentification?.fields || {}).length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {Object.entries(companyIdentification?.fields || {}).map(([k, v]) => (
+              <div key={k}>
+                <p className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</p>
+                <p className="font-semibold text-slate-700 dark:text-slate-200">{String(v || '—')}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+        )}
       </div>
 
       {/* Projetos */}
@@ -562,6 +747,16 @@ function ReviewPanel({
       {/* Ações */}
       {!isApproved && (
         <div className="flex gap-3 pt-2 sticky bottom-0 bg-transparent">
+          {(needsAi || (missingFields?.length ?? 0) > 0) && (
+            <button
+              onClick={onEnqueueAi}
+              disabled={enqueueingAi || discarding || approving}
+              className="flex-1 py-3 rounded-2xl border-2 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-900/20 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            >
+              {enqueueingAi ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Enfileirar IA
+            </button>
+          )}
           <button
             onClick={onDiscard}
             disabled={discarding || approving}

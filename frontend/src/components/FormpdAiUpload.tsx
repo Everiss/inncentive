@@ -1,16 +1,18 @@
-﻿import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, FileText, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../api/api';
 
 interface Props {
   onComplete?: () => void;
   companyId?: number;
 }
 
-export default function FormpdAiUpload({ onComplete }: Props) {
+export default function FormpdAiUpload({ onComplete, companyId }: Props) {
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -23,7 +25,22 @@ export default function FormpdAiUpload({ onComplete }: Props) {
 
   const handleUpload = async () => {
     if (!file) return;
-    toast.error('Upload FORMP&D IA temporariamente desativado.');
+    const form = new FormData();
+    form.append('file', file);
+    setUploading(true);
+    try {
+      const { data } = await api.post('/imports/formpd/upload', form, {
+        params: companyId ? { companyId } : undefined,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success(`FORMP&D recebido no lote #${data.batchId}. Status: ${data.status}`);
+      setFile(null);
+      onComplete?.();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Erro ao enviar FORMP&D');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -91,11 +108,11 @@ export default function FormpdAiUpload({ onComplete }: Props) {
 
         <button
           onClick={handleUpload}
-          disabled={!file}
+          disabled={!file || uploading}
           className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-purple-700 text-white rounded-2xl font-bold shadow-lg shadow-violet-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
         >
           <Zap className="w-4 h-4" />
-          Iniciar Extracao
+          {uploading ? 'Enviando...' : 'Iniciar Extracao'}
         </button>
 
         <button
@@ -108,3 +125,4 @@ export default function FormpdAiUpload({ onComplete }: Props) {
     </div>
   );
 }
+
