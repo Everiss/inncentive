@@ -2,9 +2,20 @@
   "name": "new-tax",
   "version": "1.0.0",
   "scripts": {
-    "backend": "cd backend && npm run start:dev",
-    "frontend": "cd frontend && npm run dev",
-    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+    "backend": "npm --prefix backend run start:dev",
+    "frontend": "npm --prefix frontend run dev",
+    "import-service": "npm --prefix services/import-service run dev",
+    "file-hub": "npm --prefix services/file-hub run dev",
+    "notification-service": "npm --prefix services/notification-service run dev",
+    "ai-service": "cd services/ai-service && uvicorn app.main:app --reload --port 8020",
+    "pdf-extractor": "cd services/pdf-extractor && uvicorn app.main:app --reload --port 8010",
+    "start:app": "concurrently -n backend,frontend -c yellow,cyan \"npm run backend\" \"npm run frontend\"",
+    "start:services:node": "concurrently -n import,filehub,notify -c green,magenta,blue \"npm run import-service\" \"npm run file-hub\" \"npm run notification-service\"",
+    "start:services:python": "concurrently -n ai,pdf -c red,white \"npm run ai-service\" \"npm run pdf-extractor\"",
+    "start:all": "concurrently -n app,node,python -c cyan,green,red \"npm run start:app\" \"npm run start:services:node\" \"npm run start:services:python\"",
+    "start": "npm run start:all",
+    "dev:app": "powershell -ExecutionPolicy Bypass -File ./.start.ps1 app",
+    "dev": "powershell -ExecutionPolicy Bypass -File ./.start.ps1 all"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

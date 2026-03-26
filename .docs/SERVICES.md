@@ -16,6 +16,39 @@ Servicos ativos no ecossistema `new-tax`:
 - `import-service` (Node/Express)
 - `notification-service` (Node/Express + Socket.IO)
 
+Startup unificado pela raiz:
+
+```bash
+# tudo (app + microservicos)
+npm run start
+
+# tudo (fallback Windows sem concurrently)
+npm run dev
+
+# somente app (backend + frontend)
+npm run start:app
+
+# somente microservicos Node
+npm run start:services:node
+
+# somente microservicos Python
+npm run start:services:python
+```
+
+Atalho PowerShell na raiz:
+
+```powershell
+.\.start.ps1 all
+.\.start.ps1 app
+.\.start.ps1 node
+.\.start.ps1 python
+```
+
+Notas:
+
+- `npm run dev` usa `.\.start.ps1 all` e abre processos separados por servico (fallback para ambientes Windows com erro `spawn EPERM` no `concurrently`).
+- `npm run start:*` mantem o modo antigo com `concurrently`.
+
 ## 2. Frontend
 
 - Tecnologia: React + Vite

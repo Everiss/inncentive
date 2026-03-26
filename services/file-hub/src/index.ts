@@ -17,7 +17,7 @@ const pool = mysql.createPool(dbUrl);
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-type Nullable<T> = T | null | undefined;
+type Nullable<T> = T | null;
 
 function now() {
   return new Date();
