@@ -76,13 +76,19 @@ export class FormpdExtractionProcessor extends WorkerHost {
       });
 
       // 3. Extract via native PDF vision (parallel) — with text fallback
+      // NOTE: fallback only triggers for PDF-loading errors, NOT for API errors
+      // (credit, auth, rate-limit) which must propagate and fail the job.
       let extractedData: any;
       try {
         extractedData = await this.extractNativePdfParallel(
           pdfBuffer, pageCount, batchId, fileId, fileJobId, intakeId,
         );
       } catch (nativeErr: any) {
-        this.logger.warn(`Batch ${batchId}: PDF nativo falhou (${nativeErr.message}) — usando fallback texto`);
+        const msg: string = nativeErr?.message ?? '';
+        const isApiError = msg.includes('credit balance') || msg.includes('401') ||
+          msg.includes('invalid_api_key') || msg.includes('overloaded');
+        if (isApiError) throw nativeErr; // re-throw — do not fallback on API errors
+        this.logger.warn(`Batch ${batchId}: PDF nativo falhou (${msg}) — usando fallback texto`);
         const pdfData = await this.parsePdfText(pdfBuffer);
         const fullText = pdfData.text?.trim() ?? '';
         if (fullText.length < 100) throw new Error('Não foi possível extrair texto legível do PDF.');
