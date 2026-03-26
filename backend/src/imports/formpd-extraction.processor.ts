@@ -7,11 +7,21 @@ import { IaService } from '../ia/ia.service';
 import { FileHubService } from '../file-hub/file-hub.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { PDFDocument } from 'pdf-lib';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParseLib = require('pdf-parse');
 
-/** Max characters per AI call — ~10K tokens of input, leaves ~8K tokens for JSON output. */
-const MAX_CHARS_PER_CHUNK = 40_000;
+/**
+ * Pages per native-PDF chunk sent to Claude Vision.
+ * ~40 pages fits comfortably within Claude's 200K context.
+ */
+const PAGES_PER_CHUNK = 40;
+
+/** Max parallel AI calls in flight at once — respects Anthropic rate limits. */
+const PARALLEL_LIMIT = 4;
+
+/** Text fallback: max chars per chunk if native PDF fails (e.g. password-protected). */
+const MAX_TEXT_CHARS_PER_CHUNK = 40_000;
 
 type ParsedPdfText = { text: string; numpages: number };
 
@@ -42,52 +52,42 @@ export class FormpdExtractionProcessor extends WorkerHost {
         await this.fileHubService.markJobStarted(fileId, fileJobId, intakeId ?? null);
       }
 
-      // 1. Read and parse PDF
-      if (!fs.existsSync(filePath)) throw new Error(`Arquivo nÃ£o encontrado: ${filePath}`);
+      // 1. Read PDF buffer
+      if (!fs.existsSync(filePath)) throw new Error(`Arquivo não encontrado: ${filePath}`);
       const pdfBuffer = fs.readFileSync(filePath);
 
-      this.logger.log(`Batch ${batchId}: extraindo texto do PDF...`);
-      const pdfData = await this.parsePdfText(pdfBuffer);
-      const fullText = pdfData.text?.trim() ?? '';
-
-      if (fullText.length < 100) {
-        throw new Error(
-          'NÃ£o foi possÃ­vel extrair texto legÃ­vel do PDF. ' +
-          'Verifique se o documento nÃ£o estÃ¡ digitalizado como imagem.',
-        );
-      }
+      // 2. Count pages (fast — pdf-lib metadata only, no full parse)
+      const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
+      const pageCount = pdfDoc.getPageCount();
+      const chunkCount = Math.ceil(pageCount / PAGES_PER_CHUNK);
 
       this.logger.log(
-        `Batch ${batchId}: ${fullText.length} chars (${pdfData.numpages} pÃ¡ginas). ` +
-        `Modo: ${fullText.length <= MAX_CHARS_PER_CHUNK ? 'single-call' : 'chunked'}`,
+        `Batch ${batchId}: ${pageCount} páginas → ${chunkCount} chunk(s) PDF nativo (PAGES_PER_CHUNK=${PAGES_PER_CHUNK}, PARALLEL=${PARALLEL_LIMIT})`,
       );
-
-      const isChunked = fullText.length > MAX_CHARS_PER_CHUNK;
-      const chunks = isChunked ? this.splitText(fullText, MAX_CHARS_PER_CHUNK) : [fullText];
-      const totalSteps = chunks.length;
 
       await this.prisma.import_batches.update({
         where: { id: batchId },
-        data: {
-          total_records: totalSteps,
-          processed_records: 0,
-          success_count: 0,
-          error_count: 0,
-          status: 'PROCESSING',
-          updated_at: new Date(),
-        },
+        data: { total_records: chunkCount, processed_records: 0, success_count: 0, error_count: 0, status: 'PROCESSING', updated_at: new Date() },
       });
 
       this.notificationsGateway.sendProgress({
-        current: 0,
-        total: totalSteps,
-        message: `FORMP&D IA lote ${batchId}: iniciando extraÃ§Ã£o (${isChunked ? `${totalSteps} trechos` : 'documento Ãºnico'})`,
+        current: 0, total: chunkCount,
+        message: `FORMP&D IA lote ${batchId}: iniciando extração PDF nativo (${chunkCount} chunk(s) paralelos)`,
       });
 
-      // 2. Extract via AI
-      const extractedData = isChunked
-        ? await this.extractChunked(chunks, batchId, fileId, fileJobId, intakeId)
-        : await this.extractSingle(chunks[0], batchId, totalSteps, fileId, fileJobId, intakeId);
+      // 3. Extract via native PDF vision (parallel) — with text fallback
+      let extractedData: any;
+      try {
+        extractedData = await this.extractNativePdfParallel(
+          pdfBuffer, pageCount, batchId, fileId, fileJobId, intakeId,
+        );
+      } catch (nativeErr: any) {
+        this.logger.warn(`Batch ${batchId}: PDF nativo falhou (${nativeErr.message}) — usando fallback texto`);
+        const pdfData = await this.parsePdfText(pdfBuffer);
+        const fullText = pdfData.text?.trim() ?? '';
+        if (fullText.length < 100) throw new Error('Não foi possível extrair texto legível do PDF.');
+        extractedData = await this.extractTextParallel(fullText, batchId, fileId, fileJobId, intakeId);
+      }
 
       // 3. Validate FORMPD structure
       if (!this.validateFormpdStructure(extractedData)) {
@@ -283,29 +283,81 @@ export class FormpdExtractionProcessor extends WorkerHost {
 
   // â”€â”€â”€ AI extraction helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  private async extractSingle(text: string, batchId: number, totalSteps: number, fileId?: string, fileJobId?: string, intakeId?: string): Promise<any> {
-    this.logger.log(`Batch ${batchId}: processando trecho 1/${totalSteps}...`);
-    const response = await this.iaService.execute({ task: 'FORMPD_EXTRACTION', content: text });
-    await this.updateChunkProgress(batchId, 1, totalSteps, fileId, fileJobId, intakeId);
-    return response.data;
-  }
-
-  private async extractChunked(chunks: string[], batchId: number, fileId?: string, fileJobId?: string, intakeId?: string): Promise<any> {
-    this.logger.log(`Batch ${batchId}: documento dividido em ${chunks.length} trechos`);
-
-    const results: any[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      this.logger.log(`Batch ${batchId}: processando trecho ${i + 1}/${chunks.length}...`);
+  /**
+   * Splits the PDF into page-range chunks and processes them in parallel,
+   * up to PARALLEL_LIMIT simultaneous Anthropic calls.
+   * Each chunk is sent as a native base64 PDF document (Claude Vision).
+   */
+  private async extractNativePdfParallel(
+    pdfBuffer: Buffer,
+    pageCount: number,
+    batchId: number,
+    fileId?: string, fileJobId?: string, intakeId?: string,
+  ): Promise<any> {
+    const total = Math.ceil(pageCount / PAGES_PER_CHUNK);
+    const tasks = Array.from({ length: total }, (_, idx) => async () => {
+      const startPage = idx * PAGES_PER_CHUNK;
+      const endPage = Math.min(startPage + PAGES_PER_CHUNK - 1, pageCount - 1);
+      this.logger.log(`Batch ${batchId}: chunk ${idx + 1}/${total} (págs ${startPage + 1}–${endPage + 1})`);
+      const chunkBuf = await this.extractPdfPageRange(pdfBuffer, startPage, endPage);
       const response = await this.iaService.execute({
         task: 'FORMPD_EXTRACTION',
-        content: chunks[i],
+        content: chunkBuf.toString('base64'),
+        isPdfBase64: true,
+        chunkContext: { index: idx, total },
+      });
+      await this.updateChunkProgress(batchId, idx + 1, total, fileId, fileJobId, intakeId);
+      return response.data;
+    });
+
+    const results = await this.runWithConcurrency(tasks, PARALLEL_LIMIT);
+    return total === 1 ? results[0] : this.mergeFormpdResults(results);
+  }
+
+  /** Extracts a page range from a PDF buffer using pdf-lib. */
+  private async extractPdfPageRange(source: Buffer, startPage: number, endPage: number): Promise<Buffer> {
+    const srcDoc = await PDFDocument.load(source, { ignoreEncryption: true });
+    const newDoc = await PDFDocument.create();
+    const indices = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+    const pages = await newDoc.copyPages(srcDoc, indices);
+    pages.forEach(p => newDoc.addPage(p));
+    return Buffer.from(await newDoc.save());
+  }
+
+  /** Runs tasks with a max concurrency limit. */
+  private async runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+    const results: T[] = new Array(tasks.length);
+    const inFlight = new Set<Promise<void>>();
+    for (let i = 0; i < tasks.length; i++) {
+      const idx = i;
+      const p: Promise<void> = tasks[idx]().then(r => { results[idx] = r; inFlight.delete(p); });
+      inFlight.add(p);
+      if (inFlight.size >= limit) await Promise.race(inFlight);
+    }
+    await Promise.all(inFlight);
+    return results;
+  }
+
+  /**
+   * Text fallback: used when pdf-lib cannot load the PDF (password-protected,
+   * corrupt, etc.). Parallelises text chunks with PARALLEL_LIMIT concurrency.
+   */
+  private async extractTextParallel(
+    text: string, batchId: number,
+    fileId?: string, fileJobId?: string, intakeId?: string,
+  ): Promise<any> {
+    const chunks = this.splitText(text, MAX_TEXT_CHARS_PER_CHUNK);
+    this.logger.log(`Batch ${batchId}: fallback texto — ${chunks.length} chunk(s) paralelos`);
+    const tasks = chunks.map((chunk, i) => async () => {
+      const response = await this.iaService.execute({
+        task: 'FORMPD_EXTRACTION', content: chunk,
         chunkContext: { index: i, total: chunks.length },
       });
-      results.push(response.data);
       await this.updateChunkProgress(batchId, i + 1, chunks.length, fileId, fileJobId, intakeId);
-    }
-
-    return this.mergeFormpdResults(results);
+      return response.data;
+    });
+    const results = await this.runWithConcurrency(tasks, PARALLEL_LIMIT);
+    return chunks.length === 1 ? results[0] : this.mergeFormpdResults(results);
   }
 
   private async updateChunkProgress(batchId: number, current: number, total: number, fileId?: string, fileJobId?: string, intakeId?: string) {
