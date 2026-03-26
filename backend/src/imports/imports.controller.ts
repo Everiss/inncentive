@@ -114,10 +114,16 @@ export class ImportsController {
   async getBatches(
     @Query('companyId') companyId?: string,
     @Query('entityType') entityType?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.importsService.getBatches(
       companyId ? Number(companyId) : undefined,
       entityType,
+      search,
+      Number(page) || 1,
+      Number(limit) || 20,
     );
   }
 

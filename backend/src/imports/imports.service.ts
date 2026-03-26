@@ -1087,14 +1087,35 @@ export class ImportsService {
     return { found: !!company, company: company ?? null };
   }
 
-  async getBatches(companyId?: number, entityType?: string) {
-    return this.prisma.import_batches.findMany({
-      where: {
-        ...(companyId  ? { company_id: companyId }  : {}),
-        ...(entityType ? { entity_type: entityType } : {}),
-      },
-      orderBy: { created_at: 'desc' },
-    });
+  async getBatches(
+    companyId?: number,
+    entityType?: string,
+    search?: string,
+    page = 1,
+    limit = 20,
+  ) {
+    const skip = (page - 1) * limit;
+    const where: any = {
+      ...(companyId  ? { company_id: companyId }  : {}),
+      ...(entityType ? { entity_type: entityType } : {}),
+      ...(search ? {
+        OR: [
+          { file_name: { contains: search } },
+          { entity_type: { contains: search } },
+          { status: { contains: search } },
+        ],
+      } : {}),
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.import_batches.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.import_batches.count({ where }),
+    ]);
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getBatchItems(batchId: number, page: number, limit: number) {
