@@ -77,9 +77,9 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
   const fetchBatches = useCallback(async () => {
     try {
       const res = await api.get('/imports/batches', {
-        params: { companyId, entityType: 'FORMPD_AI_EXTRACTION' },
+        params: { companyId, entityType: 'FORMPD_AI_EXTRACTION', limit: 200 },
       });
-      setBatches(res.data);
+      setBatches(res.data.data ?? res.data);
     } catch { /* silently fail */ } finally {
       setLoading(false);
     }
