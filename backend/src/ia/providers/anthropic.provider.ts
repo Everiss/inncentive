@@ -155,19 +155,81 @@ export class AnthropicProvider {
       return { error: 'Resposta vazia', raw: '' };
     }
 
+    // 1. Direct parse
     try { return JSON.parse(text.trim()); } catch { }
 
+    // 2. Fenced code block
     const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fencedMatch) {
       try { return JSON.parse(fencedMatch[1].trim()); } catch { }
     }
 
+    // 3. First complete JSON object in text
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try { return JSON.parse(jsonMatch[0]); } catch { }
     }
 
+    // 4. Truncation recovery — if response was cut off by max_tokens,
+    //    try to close open brackets so we salvage what was extracted
+    const start = text.indexOf('{');
+    if (start !== -1) {
+      const partial = text.slice(start);
+      const recovered = this.repairTruncatedJson(partial);
+      if (recovered) {
+        this.logger.warn(`JSON truncado recuperado para tarefa ${task} (${partial.length} chars)`);
+        return recovered;
+      }
+    }
+
     this.logger.warn(`JSON inválido na resposta para tarefa ${task}`);
     return { error: 'JSON inválido na resposta', raw: text.slice(0, 500) };
+  }
+
+  /**
+   * Attempts to close a truncated JSON object by counting open brackets/braces
+   * and appending the minimum closing sequence. Returns null if irrecoverable.
+   */
+  private repairTruncatedJson(partial: string): Record<string, any> | null {
+    // Remove trailing incomplete string or key
+    let s = partial.trimEnd();
+
+    // Drop trailing comma
+    if (s.endsWith(',')) s = s.slice(0, -1);
+
+    // Drop incomplete string (unclosed quote at the end)
+    const lastQuote = s.lastIndexOf('"');
+    if (lastQuote !== -1) {
+      const afterLastQuote = s.slice(lastQuote + 1);
+      // If no closing quote after the last opening quote, it's truncated
+      if (!afterLastQuote.includes('"')) {
+        s = s.slice(0, lastQuote);
+        if (s.endsWith(':')) s = s.slice(0, -1); // drop orphaned key
+        if (s.endsWith(',')) s = s.slice(0, -1);
+      }
+    }
+
+    // Count unclosed braces and brackets
+    let braces = 0, brackets = 0;
+    let inStr = false, escaped = false;
+    for (const ch of s) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\' && inStr) { escaped = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') braces++;
+      else if (ch === '}') braces--;
+      else if (ch === '[') brackets++;
+      else if (ch === ']') brackets--;
+    }
+
+    if (braces <= 0 && brackets <= 0) return null; // nothing to close
+
+    const closing = ']'.repeat(Math.max(0, brackets)) + '}'.repeat(Math.max(0, braces));
+    try {
+      return JSON.parse(s + closing);
+    } catch {
+      return null;
+    }
   }
 }

@@ -10,8 +10,8 @@ import * as path from 'path';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParseLib = require('pdf-parse');
 
-/** Max characters per AI call â€” ~20K tokens, leaves room for system prompt and output. */
-const MAX_CHARS_PER_CHUNK = 80_000;
+/** Max characters per AI call — ~10K tokens of input, leaves ~8K tokens for JSON output. */
+const MAX_CHARS_PER_CHUNK = 40_000;
 
 type ParsedPdfText = { text: string; numpages: number };
 
