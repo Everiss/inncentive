@@ -183,6 +183,12 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [reviewItem, setReviewItem] = useState<ReviewItem | null>(null);
   const [expandedProject, setExpandedProject] = useState<number | null>(null);
+  const [collapsedCards, setCollapsedCards] = useState({
+    receipt: true,
+    companyRegistry: true,
+    companyIdentification: true,
+    projects: false,
+  });
   const [approving, setApproving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [enqueueingAi, setEnqueueingAi] = useState(false);
@@ -265,10 +271,20 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
         companyRegistry,
       });
       setExpandedProject(null);
+      setCollapsedCards({
+        receipt: true,
+        companyRegistry: true,
+        companyIdentification: true,
+        projects: false,
+      });
     } catch {
       toast.error('Erro ao abrir extração.');
     }
   }, []);
+
+  const toggleCard = (key: keyof typeof collapsedCards) => {
+    setCollapsedCards(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // ── Approve / Discard batch ────────────────────────────────────────────────
 
@@ -780,154 +796,222 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                   </div>
 
                   {/* Submission receipt */}
-                  <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700">
-                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Recibo de Entrega</p>
-                    <div className="grid grid-cols-1 gap-2 text-xs">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-500">Remetente</span>
-                        <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">
-                          {reviewItem.submissionReceipt?.sender_name || '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-500">CPF</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-200">
-                          {reviewItem.submissionReceipt?.sender_cpf || '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-500">Expedição</span>
-                        <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">
-                          {reviewItem.submissionReceipt?.expedition_at || '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-slate-500">Código</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-200 text-right break-all">
-                          {reviewItem.submissionReceipt?.authenticity_code || '—'}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700 overflow-hidden">
+                    <button
+                      onClick={() => toggleCard('receipt')}
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
+                    >
+                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Recibo de Entrega</p>
+                      {collapsedCards.receipt ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {!collapsedCards.receipt && (
+                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
+                          <div className="p-4 grid grid-cols-1 gap-2 text-xs">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">Remetente</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{reviewItem.submissionReceipt?.sender_name || '-'}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">CPF</span>
+                              <span className="font-mono text-slate-700 dark:text-slate-200">{reviewItem.submissionReceipt?.sender_cpf || '-'}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">Expedicao</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{reviewItem.submissionReceipt?.expedition_at || '-'}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">Codigo</span>
+                              <span className="font-mono text-slate-700 dark:text-slate-200 text-right break-all">{reviewItem.submissionReceipt?.authenticity_code || '-'}</span>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
-                  {/* Dados Pessoa Jurídica */}
-                  <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700">
-                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Dados Pessoa Jurídica</p>
-                    {Object.keys(reviewItem.companyRegistry?.fields || {}).length > 0 ? (
-                      <div className="grid grid-cols-1 gap-2 text-xs">
-                        {Object.entries(reviewItem.companyRegistry?.fields || {}).map(([k, v]) => (
-                          <div key={k} className="flex items-start justify-between gap-3">
-                            <span className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</span>
-                            <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '—')}</span>
+                  {/* Dados Pessoa Juridica */}
+                  <div className="bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700 overflow-hidden">
+                    <button
+                      onClick={() => toggleCard('companyRegistry')}
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
+                    >
+                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Dados Pessoa Juridica</p>
+                      {collapsedCards.companyRegistry ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {!collapsedCards.companyRegistry && (
+                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
+                          <div className="p-4">
+                            {Object.keys(reviewItem.companyRegistry?.fields || {}).length > 0 ? (
+                              <div className="grid grid-cols-1 gap-2 text-xs">
+                                {Object.entries(reviewItem.companyRegistry?.fields || {}).map(([k, v]) => (
+                                  <div key={k} className="flex items-start justify-between gap-3">
+                                    <span className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '-')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
-                    )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
-                  {/* Identificação/Características da Empresa */}
-                  <div className="p-4 bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700">
-                    <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Identificação da Empresa</p>
-                    {Object.keys(reviewItem.companyIdentification?.fields || {}).length > 0 ? (
-                      <div className="grid grid-cols-1 gap-2 text-xs">
-                        {Object.entries(reviewItem.companyIdentification?.fields || {}).map(([k, v]) => (
-                          <div key={k} className="flex items-start justify-between gap-3">
-                            <span className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</span>
-                            <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '—')}</span>
+                  {/* Identificacao/Caracteristicas da Empresa */}
+                  <div className="bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700 overflow-hidden">
+                    <button
+                      onClick={() => toggleCard('companyIdentification')}
+                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
+                    >
+                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Identificacao da Empresa</p>
+                      {collapsedCards.companyIdentification ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {!collapsedCards.companyIdentification && (
+                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
+                          <div className="p-4">
+                            {Object.keys(reviewItem.companyIdentification?.fields || {}).length > 0 ? (
+                              <div className="grid grid-cols-1 gap-2 text-xs">
+                                {Object.entries(reviewItem.companyIdentification?.fields || {}).map(([k, v]) => (
+                                  <div key={k} className="flex items-start justify-between gap-3">
+                                    <span className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '-')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+                            )}
+                            {(reviewItem.companyIdentification?.qa?.length || 0) > 0 && (
+                              <div className="mt-3 pt-3 border-t border-blue-100 dark:border-slate-700 flex flex-col gap-2">
+                                {(reviewItem.companyIdentification?.qa || []).slice(0, 8).map((qa, idx) => (
+                                  <div key={idx} className="text-xs">
+                                    <p className="font-semibold text-slate-600 dark:text-slate-300">{qa.question}</p>
+                                    <p className="text-slate-500">{qa.value || '-'}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
-                    )}
-                    {(reviewItem.companyIdentification?.qa?.length || 0) > 0 && (
-                      <div className="mt-3 pt-3 border-t border-blue-100 dark:border-slate-700 flex flex-col gap-2">
-                        {(reviewItem.companyIdentification?.qa || []).slice(0, 8).map((qa, idx) => (
-                          <div key={idx} className="text-xs">
-                            <p className="font-semibold text-slate-600 dark:text-slate-300">{qa.question}</p>
-                            <p className="text-slate-500">{qa.value || '—'}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Projects */}
                   {reviewItem.projects && reviewItem.projects.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-blue-500" /> Projetos ({reviewItem.projects.length})
-                      </p>
-                      {reviewItem.projects.map((p: any, i: number) => {
-                        const hrTotal = p.human_resources?.reduce((s: number, hr: any) => s + (hr.annual_amount || 0), 0) ?? 0;
-                        const expTotal = p.expenses?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
-                        return (
-                          <div key={i} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-blue-50 dark:border-slate-700 overflow-hidden">
-                            <button className="w-full flex items-center justify-between p-3 text-left hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
-                              onClick={() => setExpandedProject(expandedProject === i ? null : i)}>
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 bg-blue-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xs font-black text-blue-600 shrink-0">{i + 1}</div>
-                                <div>
-                                  <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{p.title}</p>
-                                  <p className="text-xs text-slate-500">{CATEGORY_LABELS[p.category] || p.category}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3 shrink-0">
-                                {hrTotal > 0 && <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{fmt(hrTotal)}</span>}
-                                {expTotal > 0 && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{fmt(expTotal)}</span>}
-                                {expandedProject === i ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                              </div>
-                            </button>
-                            <AnimatePresence>
-                              {expandedProject === i && (
-                                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
-                                  className="overflow-hidden border-t border-blue-50 dark:border-slate-700">
-                                  <div className="p-4 grid grid-cols-2 gap-3">
-                                    {p.human_resources?.length > 0 && (
-                                      <div>
-                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Users className="w-3 h-3" /> RH</p>
-                                        <div className="flex flex-col gap-1.5">
-                                          {p.human_resources.slice(0, 4).map((hr: any, hi: number) => (
-                                            <div key={hi} className="flex items-center justify-between p-2 bg-blue-50/50 dark:bg-slate-800 rounded-lg text-xs">
-                                              <div>
-                                                <p className="font-semibold truncate max-w-[80px]">{hr.name}</p>
-                                                {hr.role && <p className="text-slate-500">{hr.role}</p>}
-                                              </div>
-                                              <div className="text-right shrink-0">
-                                                {hr.annual_amount && <p className="font-bold text-blue-700 dark:text-blue-300">{fmt(hr.annual_amount)}</p>}
-                                                {hr.dedication_pct && <p className="text-slate-400">{hr.dedication_pct}%</p>}
-                                              </div>
-                                            </div>
-                                          ))}
-                                          {p.human_resources.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.human_resources.length - 4}</p>}
+                    <div className="bg-blue-50/40 dark:bg-slate-800/40 rounded-2xl border border-blue-100 dark:border-slate-700 overflow-hidden">
+                      <button
+                        onClick={() => toggleCard('projects')}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
+                      >
+                        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
+                          <ClipboardList className="w-4 h-4 text-blue-500" /> Projetos ({reviewItem.projects.length})
+                        </p>
+                        {collapsedCards.projects ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {!collapsedCards.projects && (
+                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
+                            <div className="p-3 flex flex-col gap-2">
+                              {reviewItem.projects.map((p: any, i: number) => {
+                                const hrTotal = p.human_resources?.reduce((s: number, hr: any) => s + (hr.annual_amount || 0), 0) ?? 0;
+                                const expTotal = p.expenses?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
+                                return (
+                                  <div key={i} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-blue-50 dark:border-slate-700 overflow-hidden">
+                                    <button className="w-full flex items-center justify-between p-3 text-left hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
+                                      onClick={() => setExpandedProject(expandedProject === i ? null : i)}>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 bg-blue-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xs font-black text-blue-600 shrink-0">{i + 1}</div>
+                                        <div>
+                                          <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{p.title}</p>
+                                          <p className="text-xs text-slate-500">{CATEGORY_LABELS[p.category] || p.category || 'Categoria nao informada'}</p>
                                         </div>
                                       </div>
-                                    )}
-                                    {p.expenses?.length > 0 && (
-                                      <div>
-                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Layers className="w-3 h-3" /> Despesas</p>
-                                        <div className="flex flex-col gap-1.5">
-                                          {p.expenses.slice(0, 4).map((exp: any, ei: number) => (
-                                            <div key={ei} className="flex items-center justify-between p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg text-xs">
-                                              <p className="text-slate-600 dark:text-slate-400 truncate max-w-[80px]">{exp.category || exp.description}</p>
-                                              <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
-                                            </div>
-                                          ))}
-                                          {p.expenses.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.expenses.length - 4}</p>}
-                                        </div>
+                                      <div className="flex items-center gap-3 shrink-0">
+                                        {hrTotal > 0 && <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{fmt(hrTotal)}</span>}
+                                        {expTotal > 0 && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{fmt(expTotal)}</span>}
+                                        {expandedProject === i ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                                       </div>
-                                    )}
+                                    </button>
+                                    <AnimatePresence>
+                                      {expandedProject === i && (
+                                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
+                                          className="overflow-hidden border-t border-blue-50 dark:border-slate-700">
+                                          <div className="p-4 flex flex-col gap-3">
+                                            {p.description && (
+                                              <div className="text-xs">
+                                                <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">Descricao</p>
+                                                <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{p.description}</p>
+                                              </div>
+                                            )}
+                                            <div className="flex items-center gap-2 text-xs">
+                                              <span className="px-2 py-1 rounded-lg bg-blue-100 dark:bg-slate-700 text-blue-700 dark:text-blue-300 font-semibold">
+                                                {CATEGORY_LABELS[p.category] || p.category || 'Categoria nao informada'}
+                                              </span>
+                                              {typeof p.is_continuous === 'boolean' && (
+                                                <span className="px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-semibold">
+                                                  {p.is_continuous ? 'Projeto continuo' : 'Projeto nao continuo'}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                              {p.human_resources?.length > 0 && (
+                                                <div>
+                                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Users className="w-3 h-3" /> RH</p>
+                                                  <div className="flex flex-col gap-1.5">
+                                                    {p.human_resources.slice(0, 4).map((hr: any, hi: number) => (
+                                                      <div key={hi} className="flex items-center justify-between p-2 bg-blue-50/50 dark:bg-slate-800 rounded-lg text-xs">
+                                                        <div>
+                                                          <p className="font-semibold truncate max-w-[80px]">{hr.name}</p>
+                                                          {hr.role && <p className="text-slate-500">{hr.role}</p>}
+                                                        </div>
+                                                        <div className="text-right shrink-0">
+                                                          {hr.annual_amount && <p className="font-bold text-blue-700 dark:text-blue-300">{fmt(hr.annual_amount)}</p>}
+                                                          {hr.dedication_pct && <p className="text-slate-400">{hr.dedication_pct}%</p>}
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                    {p.human_resources.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.human_resources.length - 4}</p>}
+                                                  </div>
+                                                </div>
+                                              )}
+                                              {p.expenses?.length > 0 && (
+                                                <div>
+                                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Layers className="w-3 h-3" /> Despesas</p>
+                                                  <div className="flex flex-col gap-1.5">
+                                                    {p.expenses.slice(0, 4).map((exp: any, ei: number) => (
+                                                      <div key={ei} className="flex items-center justify-between p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg text-xs">
+                                                        <p className="text-slate-600 dark:text-slate-400 truncate max-w-[80px]">{exp.category || exp.description}</p>
+                                                        <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
+                                                      </div>
+                                                    ))}
+                                                    {p.expenses.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.expenses.length - 4}</p>}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                            {!p.description && !(p.human_resources?.length > 0) && !(p.expenses?.length > 0) && (
+                                              <p className="text-xs text-slate-500">Sem detalhes adicionais para este projeto.</p>
+                                            )}
+                                          </div>
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
                                   </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        );
-                      })}
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   )}
+
                 </div>
 
                 {/* Actions — pinned at bottom */}
