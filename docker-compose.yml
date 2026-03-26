@@ -10,5 +10,65 @@ services:
       - valkey_data:/data
     restart: unless-stopped
 
+  pdf-extractor:
+    build:
+      context: ./services/pdf-extractor
+      dockerfile: Dockerfile
+    container_name: new-tax-pdf-extractor
+    ports:
+      - "8010:8010"
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    container_name: new-tax-ai-service
+    ports:
+      - "8020:8020"
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: new-tax-notification-service
+    environment:
+      - NOTIFICATION_SERVICE_PORT=8050
+      - NOTIFICATION_CORS_ORIGIN=*
+    ports:
+      - "8050:8050"
+    restart: unless-stopped
+
+  file-hub:
+    build:
+      context: ./services/file-hub
+      dockerfile: Dockerfile
+    container_name: new-tax-file-hub
+    environment:
+      - FILE_HUB_PORT=8030
+      - FILE_HUB_DATABASE_URL=mysql://file_hub_svc:FileHubSvc%232026%21@host.docker.internal:3306/new_tax_fileserver
+      - FILESERVER_ROOT=/data/upload
+    ports:
+      - "8030:8030"
+    volumes:
+      - ./backend/upload:/data/upload
+    restart: unless-stopped
+
+  import-service:
+    build:
+      context: ./services/import-service
+      dockerfile: Dockerfile
+    container_name: new-tax-import-service
+    environment:
+      - IMPORT_SERVICE_PORT=8040
+      - IMPORT_SERVICE_DATABASE_URL=mysql://import_svc:ImportSvc%232026%21@host.docker.internal:3306/new_tax_imports
+      - IMPORT_UPLOAD_ROOT=/data/imports
+    ports:
+      - "8040:8040"
+    volumes:
+      - ./backend/upload:/data
+    restart: unless-stopped
+
 volumes:
   valkey_data:

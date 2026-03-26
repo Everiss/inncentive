@@ -4,10 +4,10 @@ import { socket } from '../api/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileSpreadsheet, BrainCircuit, CheckCircle2, Clock, AlertCircle,
-  RefreshCw, Eye, Calendar, TrendingUp, Sparkles,
+  RefreshCw, Eye, Calendar, TrendingUp, Sparkles, Upload,
   Bell, Loader2, ShieldCheck, X, ThumbsUp, ThumbsDown,
   Layers, DollarSign, ChevronDown, ChevronUp, ClipboardList, Users,
-  HelpCircle, Send, FileClock, FileCheck,
+  HelpCircle, Send, FileClock, FileCheck, Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FormpdAiUpload from './FormpdAiUpload';
@@ -444,7 +444,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
           </button>
           <button onClick={() => setShowUploadModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white rounded-xl shadow-lg shadow-violet-600/25 transition-all font-bold text-sm">
-            <Sparkles className="w-4 h-4" /> Importar via IA
+            <Upload className="w-4 h-4" /> Importar FORMP&D
           </button>
         </div>
       </div>
@@ -464,12 +464,12 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
             <div>
               <p className="font-bold text-blue-900 dark:text-slate-100">Nenhum FORMP&D cadastrado</p>
               <p className="text-sm text-slate-500 mt-1">
-                Use <strong>Importar via IA</strong> para enviar um PDF e extrair automaticamente os dados.
+                Use <strong>Importar FORMP&D</strong> para enviar um PDF e extrair automaticamente os dados.
               </p>
             </div>
             <button onClick={() => setShowUploadModal(true)}
               className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold text-sm transition-colors">
-              <Sparkles className="w-4 h-4" /> Importar via IA
+              <Upload className="w-4 h-4" /> Importar FORMP&D
             </button>
           </div>
         ) : (
@@ -761,10 +761,10 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
               <div className="p-6 border-b border-blue-50 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
                 <div>
                   <h3 className="font-black text-blue-900 dark:text-slate-100 text-xl flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-blue-500" /> Importar FORM via IA
+                    <Upload className="w-5 h-5 text-violet-500" /> Importar FORMP&D
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Claude identifica empresa e ano-base do PDF. Se a empresa não estiver cadastrada, você será consultado.
+                    Extração em duas etapas: determinística (rápida, gratuita) seguida de IA se necessário.
                   </p>
                 </div>
                 <button onClick={() => setShowUploadModal(false)}
@@ -772,7 +772,30 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-8">
+
+              {/* Two-step flow explanation */}
+              <div className="px-8 pt-6 grid grid-cols-2 gap-3">
+                <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
+                  <div className="w-8 h-8 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
+                    <Zap className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-emerald-800 dark:text-emerald-300 text-sm">Etapa 1 — Determinística</p>
+                    <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70 mt-0.5">Regex + heurística, ~2s, sem custo de IA</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-2xl border border-violet-100 dark:border-violet-800/50">
+                  <div className="w-8 h-8 bg-violet-500 rounded-xl flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-violet-800 dark:text-violet-300 text-sm">Etapa 2 — IA (opcional)</p>
+                    <p className="text-xs text-violet-700/70 dark:text-violet-400/70 mt-0.5">Claude completa campos não encontrados</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-8 pb-8 pt-4">
                 <FormpdAiUpload onComplete={() => { setShowUploadModal(false); fetchPendingBatches(); }} />
               </div>
             </motion.div>

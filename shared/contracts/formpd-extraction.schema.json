@@ -1,0 +1,41 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inncentive.local/contracts/formpd-extraction.schema.json",
+  "title": "FORMPD Deterministic Extraction Response",
+  "type": "object",
+  "required": [
+    "is_valid_formpd",
+    "extraction_source",
+    "confidence",
+    "form_data",
+    "missing_fields",
+    "needs_ai"
+  ],
+  "properties": {
+    "is_valid_formpd": { "type": "boolean" },
+    "extraction_source": { "type": "string", "enum": ["DETERMINISTIC"] },
+    "confidence": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+    "cnpj_from_form": { "type": ["string", "null"] },
+    "company_name": { "type": ["string", "null"] },
+    "fiscal_year": { "type": ["integer", "null"] },
+    "form_data": { "type": "object" },
+    "missing_fields": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ai_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "reason", "priority"],
+        "properties": {
+          "field": { "type": "string" },
+          "reason": { "type": "string" },
+          "priority": { "type": "string", "enum": ["high", "medium", "low"] }
+        }
+      }
+    },
+    "needs_ai": { "type": "boolean" },
+    "meta": { "type": "object" }
+  }
+}

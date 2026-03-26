@@ -1,0 +1,23 @@
+﻿[project]
+name = "pdf-extractor"
+version = "0.1.0"
+description = "Deterministic PDF extraction microservice for FORMP&D"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi==0.116.1",
+  "uvicorn[standard]==0.35.0",
+  "pydantic==2.11.7",
+  "pydantic-settings==2.10.1",
+  "pymupdf==1.26.4",
+  "pdfplumber==0.11.7",
+  "python-multipart==0.0.20"
+]
+
+[project.optional-dependencies]
+ocr = ["pytesseract==0.3.13", "opencv-python==4.12.0.88"]
+tables = ["camelot-py==1.0.9", "tabula-py==2.10.0"]
+
+[tool.uvicorn]
+factory = false
+host = "0.0.0.0"
+port = 8010

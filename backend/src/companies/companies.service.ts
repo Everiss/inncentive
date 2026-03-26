@@ -1,11 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { ContactsService } from '../contacts/contacts.service';
-import { firstValueFrom } from 'rxjs';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { ContactsService } from '../contacts/contacts.service';
 import { parseReceitaWSPhones } from '../common/phone-parser.util';
+import { ReceitaWsClient } from '../integrations/receita-ws/client';
 
 @Injectable()
 export class CompaniesService {
@@ -13,9 +11,8 @@ export class CompaniesService {
 
   constructor(
     private prisma: PrismaService,
-    private httpService: HttpService,
-    private configService: ConfigService,
     private contactsService: ContactsService,
+    private receitaWsClient: ReceitaWsClient,
   ) {}
 
   async findAll(params: { page: number; limit: number; search: string; sortBy: string; sortOrder: 'asc' | 'desc' }) {
@@ -96,10 +93,6 @@ export class CompaniesService {
     });
   }
 
-  /**
-   * Checks if a CNPJ already exists in the local DB.
-   * Returns { exists, company } so the frontend can decide what to show.
-   */
   async checkCnpj(rawCnpj: string) {
     const cnpj = this.cleanCnpj(rawCnpj);
     if (!cnpj) return { exists: false, company: null };
@@ -112,15 +105,10 @@ export class CompaniesService {
     return { exists: !!company, company };
   }
 
-  /**
-   * Registers or updates a company by fetching data from ReceitaWS.
-   * If forceUpdate=true, it will update an existing record.
-   */
   async registerByCnpj(rawCnpj: string, forceUpdate: boolean) {
     const cnpj = this.cleanCnpj(rawCnpj);
-    if (!cnpj) throw new Error('CNPJ inválido.');
+    if (!cnpj) throw new Error('CNPJ invalido.');
 
-    // If not forcing update, check existence
     if (!forceUpdate) {
       const existing = await this.prisma.companies.findUnique({ where: { cnpj } });
       if (existing) {
@@ -128,27 +116,11 @@ export class CompaniesService {
       }
     }
 
-    // Fetch from ReceitaWS
-    const rawToken = this.configService.get<string>('RECEITA_WS_TOKEN') || '';
-    const token = rawToken.replace(/"/g, '').trim();
-    const baseUrl = 'https://www.receitaws.com.br/v1/cnpj/';
-    const url = token 
-      ? `${baseUrl}${cnpj}/days/30` // Versão comercial (com defasagem)
-      : `${baseUrl}${cnpj}`;        // Versão gratuita 
-
     try {
-      this.logger.log(`Consultando CNPJ ${cnpj} via ReceitaWS (${token ? 'Comercial' : 'Pública'})`);
-      const headers: any = { 'Accept': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`; // Padrão OAuth2/Bearer
-      }
-
-      const { data } = await firstValueFrom(
-        this.httpService.get(url, { headers, timeout: 15000 }),
-      );
+      const data = await this.receitaWsClient.fetchCnpj(cnpj);
 
       if (data.status === 'ERROR') {
-        return { success: false, error: data.message || 'CNPJ não encontrado na Receita Federal.' };
+        return { success: false, error: data.message || 'CNPJ nao encontrado na Receita Federal.' };
       }
 
       const parseBrDate = (str?: string): Date | null => {
@@ -186,10 +158,8 @@ export class CompaniesService {
         },
       });
 
-      // Sync company phones
       await this.syncCompanyPhones(company.id, data.telefone);
 
-      // Sync address
       if (data.logradouro) {
         await this.prisma.addresses.deleteMany({ where: { company_id: company.id } });
         await this.prisma.addresses.create({
@@ -206,7 +176,6 @@ export class CompaniesService {
         });
       }
 
-      // Sync CNAEs
       if (data.atividade_principal && data.atividade_principal.length > 0) {
         const cnaeArr = [data.atividade_principal[0], ...(data.atividades_secundarias || [])];
         for (let idx = 0; idx < cnaeArr.length; idx++) {
@@ -226,7 +195,6 @@ export class CompaniesService {
         }
       }
 
-      // Sync contacts from ReceitaWS response
       try {
         await this.contactsService.syncContactsFromReceitaWS(company.id, data);
       } catch (contactErr: any) {

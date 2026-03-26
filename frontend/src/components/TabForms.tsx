@@ -3,12 +3,12 @@ import api from '../api/api';
 import { socket } from '../api/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BrainCircuit, Upload, CheckCircle2, Clock, AlertCircle, RefreshCw,
-  Eye, Layers, ChevronRight, Sparkles, Archive, TrendingUp, FileClock,
-  DollarSign, ChevronDown, ChevronUp, ClipboardList, Users,
-  ShieldCheck, ShieldAlert, Loader2, ThumbsUp, ThumbsDown, Bell,
+  CheckCircle2, Clock, AlertCircle, RefreshCw,
+  Eye, Layers, ChevronRight, Sparkles, Archive, FileClock,
+  DollarSign, ChevronDown, ChevronUp, ClipboardList,
+  ShieldAlert, ShieldCheck, ThumbsDown, ThumbsUp,
+  TrendingUp, Users, Loader2,
 } from 'lucide-react';
-import FormpdAiUpload from './FormpdAiUpload';
 import toast from 'react-hot-toast';
 
 interface Props {
@@ -62,7 +62,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   INOVACAO_TECNOLOGICA: 'Inovação Tecnológica',
 };
 
-type View = 'dashboard' | 'upload' | 'review';
+type View = 'dashboard' | 'review';
 
 export default function TabImportacaoIA({ companyId, cnpj }: Props) {
   const [view, setView] = useState<View>('dashboard');
@@ -218,45 +218,15 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
   return (
     <div className="flex flex-col gap-6">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {view !== 'dashboard' && (
-            <button
-              onClick={() => { setView('dashboard'); setReview(null); }}
-              className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 dark:bg-slate-800 text-blue-600 hover:bg-blue-100 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4 rotate-180" />
-            </button>
-          )}
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-700 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <BrainCircuit className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-bold text-blue-900 dark:text-slate-100">
-                {view === 'upload' ? 'Novo Upload de PDF' :
-                  view === 'review' ? `Revisar Extração — Lote #${review?.batch.id}` :
-                    'Importação de FORM via IA'}
-              </h3>
-              <p className="text-xs text-slate-500 flex items-center gap-1">
-                {view === 'dashboard' && <><Bell className="w-3 h-3" /> Você será notificado quando a análise terminar</>}
-                {view === 'upload' && 'Claude valida se o documento pertence a esta empresa'}
-                {view === 'review' && 'Dados extraídos pela IA — revise e aprove'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {view === 'dashboard' && (
-          <button
-            onClick={() => setView('upload')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white rounded-xl shadow-lg shadow-violet-600/25 transition-all font-semibold text-sm"
-          >
-            <Upload className="w-4 h-4" /> Novo Upload de PDF
-          </button>
-        )}
-      </div>
+      {view !== 'dashboard' && (
+        <button
+          onClick={() => { setView('dashboard'); setReview(null); }}
+          className="self-start flex items-center gap-1.5 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          <ChevronRight className="w-4 h-4 rotate-180" />
+          Voltar ao histórico
+        </button>
+      )}
 
       <AnimatePresence mode="wait">
 
@@ -264,31 +234,6 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
         {view === 'dashboard' && (
           <motion.div key="dashboard" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="flex flex-col gap-6">
-
-            {/* Fluxo explicativo */}
-            <div className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/10 p-5 rounded-3xl border border-violet-100 dark:border-violet-800/50">
-              <h4 className="font-bold text-violet-900 dark:text-violet-200 mb-3 flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> Fluxo de importação — dentro da empresa
-              </h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { n: '1', icon: Upload, label: 'Upload do PDF', desc: 'Envie o FORMP&D desta empresa' },
-                  { n: '2', icon: BrainCircuit, label: 'Claude Analisa', desc: 'IA extrai dados e valida o CNPJ do documento' },
-                  { n: '3', icon: Eye, label: 'Você Revisa', desc: 'Confirme os dados antes de salvar' },
-                  { n: '4', icon: CheckCircle2, label: 'Aprovação', desc: 'Dados promovidos para os módulos do sistema' },
-                ].map(({ n, icon: Icon, label, desc }) => (
-                  <div key={n} className="flex items-start gap-3 p-3 bg-white/60 dark:bg-slate-900/60 rounded-2xl">
-                    <div className="w-8 h-8 bg-violet-600 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0">{n}</div>
-                    <div>
-                      <p className="font-bold text-violet-900 dark:text-violet-200 text-sm flex items-center gap-1">
-                        <Icon className="w-3.5 h-3.5" /> {label}
-                      </p>
-                      <p className="text-xs text-violet-600/80 dark:text-violet-400/80 mt-0.5">{desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -332,7 +277,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
                     <Archive className="w-7 h-7 text-violet-300 dark:text-violet-700" />
                   </div>
                   <p className="font-semibold text-blue-900 dark:text-slate-200">Nenhuma extração para esta empresa</p>
-                  <p className="text-sm text-slate-500">Clique em "Novo Upload de PDF" para começar.</p>
+                  <p className="text-sm text-slate-500">Acesse o menu FORMs para importar novos arquivos.</p>
                 </div>
               ) : (
                 <table className="w-full text-left">
@@ -385,17 +330,6 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
                 </table>
               )}
             </div>
-          </motion.div>
-        )}
-
-        {/* ── UPLOAD ── */}
-        {view === 'upload' && (
-          <motion.div key="upload" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-violet-100 dark:border-violet-900/50 shadow-xl shadow-violet-500/10">
-            <FormpdAiUpload
-              companyId={companyId}
-              onComplete={() => { fetchBatches(); setView('dashboard'); }}
-            />
           </motion.div>
         )}
 
