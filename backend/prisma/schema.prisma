@@ -143,7 +143,7 @@ model import_items {
   id            Int            @id @default(autoincrement())
   batch_id      Int
   file_job_id   String?        @db.VarChar(36)
-  record_data   String         @db.Text
+  record_data   String         @db.MediumText
   status        String         @default("PENDING") @db.VarChar(50)
   error_message String?        @db.Text
   created_at    DateTime       @default(now())

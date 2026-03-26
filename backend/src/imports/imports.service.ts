@@ -764,27 +764,41 @@ export class ImportsService {
    * Discard a FORMPD batch: move the PDF to the rejected folder and mark as DISCARDED.
    */
   async streamBatchPdf(batchId: number, res: any) {
-    const item = await this.prisma.import_items.findFirst({ where: { batch_id: batchId } });
-    if (!item) throw new NotFoundException('Item não encontrado');
+    // Primary source: files.storage_key via batch.file_id (authoritative, never truncated)
+    const batch = await this.prisma.import_batches.findUnique({
+      where: { id: batchId },
+      select: { file_id: true },
+    });
+    if (!batch) throw new NotFoundException('Lote não encontrado');
 
-    let parsed: any;
-    try { parsed = JSON.parse(item.record_data); } catch {
-      throw new BadRequestException('Dados corrompidos');
+    let filePath: string | null = null;
+
+    if (batch.file_id) {
+      const fileRow = await (this.prisma as any).files.findUnique({
+        where: { id: batch.file_id },
+        select: { storage_key: true },
+      });
+      filePath = fileRow?.storage_key ?? null;
     }
 
-    const filePath: string | null = parsed.file_path ?? null;
+    // Fallback: file_path stored in record_data (legacy / backup)
+    if (!filePath) {
+      const item = await this.prisma.import_items.findFirst({ where: { batch_id: batchId } });
+      if (item?.record_data) {
+        try {
+          const parsed = JSON.parse(item.record_data);
+          filePath = parsed.file_path ?? null;
+        } catch { /* ignore — record_data may be truncated */ }
+      }
+    }
+
     if (!filePath) throw new NotFoundException('Arquivo PDF não disponível para este lote');
 
     // Security: file must be inside the upload directory
     const uploadRoot = path.resolve(process.cwd(), 'upload');
     const resolvedPath = path.resolve(filePath);
-    if (!resolvedPath.startsWith(uploadRoot)) {
-      throw new BadRequestException('Acesso negado');
-    }
-
-    if (!fs.existsSync(resolvedPath)) {
-      throw new NotFoundException('Arquivo não encontrado no disco');
-    }
+    if (!resolvedPath.startsWith(uploadRoot)) throw new BadRequestException('Acesso negado');
+    if (!fs.existsSync(resolvedPath)) throw new NotFoundException('Arquivo não encontrado no disco');
 
     const stat = fs.statSync(resolvedPath);
     res.setHeader('Content-Type', 'application/pdf');
