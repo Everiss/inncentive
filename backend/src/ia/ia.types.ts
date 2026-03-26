@@ -48,6 +48,11 @@ export interface IaRequest {
    * O provider usa isso para ajustar a instrução de cada trecho.
    */
   chunkContext?: { index: number; total: number };
+  /**
+   * Hint pré-extraído deterministicamente para injetar no início da mensagem.
+   * Permite que a IA pule campos já conhecidos e foque no que é complexo.
+   */
+  contextHint?: string;
 }
 
 // ─── Resposta do motor de IA ───────────────────────────────────────────────

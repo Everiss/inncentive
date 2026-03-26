@@ -8,6 +8,11 @@ import { FileHubService } from '../file-hub/file-hub.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PDFDocument } from 'pdf-lib';
+import {
+  parseFormpdDeterministic,
+  buildDeterministicContextHint,
+  DeterministicFormpdData,
+} from './formpd-deterministic-parser';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParseLib = require('pdf-parse');
 
@@ -56,7 +61,57 @@ export class FormpdExtractionProcessor extends WorkerHost {
       if (!fs.existsSync(filePath)) throw new Error(`Arquivo não encontrado: ${filePath}`);
       const pdfBuffer = fs.readFileSync(filePath);
 
-      // 2. Count pages (fast — pdf-lib metadata only, no full parse)
+      // 2. Deterministic pre-extraction (fast, no AI cost)
+      //    Extracts CNPJ, fiscal year, company name, project titles from PDF text.
+      //    Used for early CNPJ validation and as AI context hint.
+      let detData: DeterministicFormpdData | null = null;
+      let pdfTextCache: string | null = null;
+      try {
+        const pdfParsed = await this.parsePdfText(pdfBuffer);
+        pdfTextCache = pdfParsed.text?.trim() ?? '';
+        if (pdfTextCache.length > 100) {
+          detData = parseFormpdDeterministic(pdfTextCache);
+          this.logger.log(
+            `Batch ${batchId}: deterministic → CNPJ=${detData.cnpj ?? 'n/a'}, ` +
+            `year=${detData.fiscal_year ?? 'n/a'}, projects=${detData.projects.length}, ` +
+            `confidence=${detData.confidence}`,
+          );
+        }
+      } catch (detErr: any) {
+        this.logger.warn(`Batch ${batchId}: deterministic parse skipped (${detErr.message})`);
+      }
+
+      // ── Early CNPJ validation for company-scoped upload ──────────────────
+      // If CNPJ was found deterministically, check the match NOW before any AI call.
+      if (sourceCompanyId && detData?.confidence === 'HIGH' && detData.cnpj) {
+        const sourceCompanyEarly = await this.prisma.companies.findUnique({
+          where: { id: sourceCompanyId },
+          select: { id: true, cnpj: true, legal_name: true },
+        });
+        const srcCnpj = sourceCompanyEarly?.cnpj?.replace(/\D/g, '') ?? '';
+        if (srcCnpj && detData.cnpj !== srcCnpj) {
+          this.logger.warn(
+            `Batch ${batchId}: CNPJ mismatch (deterministic) — documento=${detData.cnpj}, empresa=${srcCnpj} — abortando sem chamada IA`,
+          );
+          this.moveFileToRejected(filePath);
+          await this.saveItemAndFinish(batchId, {
+            form_data: { company_info: { cnpj: detData.cnpj }, fiscal_year: detData.fiscal_year },
+            cnpj_from_form: detData.cnpj,
+            company_id: sourceCompanyId, file_path: null, file_sha256: fileHash, is_valid_formpd: true,
+          }, 'CNPJ_MISMATCH',
+            `CNPJ do documento (${detData.cnpj}) não confere com a empresa (${srcCnpj}).`);
+          this.notificationsGateway.sendFormpdCompleted({
+            batchId, status: 'CNPJ_MISMATCH', cnpjFromForm: detData.cnpj,
+            companyId: sourceCompanyId,
+            companyName: sourceCompanyEarly?.legal_name ?? null,
+            errorMessage: `CNPJ do documento não confere com esta empresa.`,
+          });
+          await this.finalizeFileJobSuccess(fileId, fileJobId, intakeId, {}, 'CNPJ_MISMATCH');
+          return;
+        }
+      }
+
+      // 3. Count pages (fast — pdf-lib metadata only)
       const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
       const pageCount = pdfDoc.getPageCount();
       const chunkCount = Math.ceil(pageCount / PAGES_PER_CHUNK);
@@ -75,13 +130,16 @@ export class FormpdExtractionProcessor extends WorkerHost {
         message: `FORMP&D IA lote ${batchId}: iniciando extração PDF nativo (${chunkCount} chunk(s) paralelos)`,
       });
 
-      // 3. Extract via native PDF vision (parallel) — with text fallback
+      // Build context hint from deterministic data to inject into AI prompt
+      const deterministicHint = detData ? buildDeterministicContextHint(detData) : '';
+
+      // 4. Extract via native PDF vision (parallel) — with text fallback
       // NOTE: fallback only triggers for PDF-loading errors, NOT for API errors
       // (credit, auth, rate-limit) which must propagate and fail the job.
       let extractedData: any;
       try {
         extractedData = await this.extractNativePdfParallel(
-          pdfBuffer, pageCount, batchId, fileId, fileJobId, intakeId,
+          pdfBuffer, pageCount, batchId, fileId, fileJobId, intakeId, deterministicHint,
         );
       } catch (nativeErr: any) {
         const msg: string = nativeErr?.message ?? '';
@@ -89,10 +147,14 @@ export class FormpdExtractionProcessor extends WorkerHost {
           msg.includes('invalid_api_key') || msg.includes('overloaded');
         if (isApiError) throw nativeErr; // re-throw — do not fallback on API errors
         this.logger.warn(`Batch ${batchId}: PDF nativo falhou (${msg}) — usando fallback texto`);
-        const pdfData = await this.parsePdfText(pdfBuffer);
-        const fullText = pdfData.text?.trim() ?? '';
+        const fullText = pdfTextCache ?? (await this.parsePdfText(pdfBuffer)).text?.trim() ?? '';
         if (fullText.length < 100) throw new Error('Não foi possível extrair texto legível do PDF.');
-        extractedData = await this.extractTextParallel(fullText, batchId, fileId, fileJobId, intakeId);
+        extractedData = await this.extractTextParallel(fullText, batchId, fileId, fileJobId, intakeId, deterministicHint);
+      }
+
+      // Merge deterministic fields into AI result (deterministic takes precedence for HIGH confidence)
+      if (detData?.confidence === 'HIGH') {
+        extractedData = this.mergeDeterministicIntoAiResult(detData, extractedData);
       }
 
       // 3. Validate FORMPD structure
@@ -299,6 +361,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
     pageCount: number,
     batchId: number,
     fileId?: string, fileJobId?: string, intakeId?: string,
+    deterministicHint?: string,
   ): Promise<any> {
     const total = Math.ceil(pageCount / PAGES_PER_CHUNK);
     const tasks = Array.from({ length: total }, (_, idx) => async () => {
@@ -311,6 +374,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
         content: chunkBuf.toString('base64'),
         isPdfBase64: true,
         chunkContext: { index: idx, total },
+        contextHint: deterministicHint || undefined,
       });
       await this.updateChunkProgress(batchId, idx + 1, total, fileId, fileJobId, intakeId);
       return response.data;
@@ -351,6 +415,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
   private async extractTextParallel(
     text: string, batchId: number,
     fileId?: string, fileJobId?: string, intakeId?: string,
+    deterministicHint?: string,
   ): Promise<any> {
     const chunks = this.splitText(text, MAX_TEXT_CHARS_PER_CHUNK);
     this.logger.log(`Batch ${batchId}: fallback texto — ${chunks.length} chunk(s) paralelos`);
@@ -358,6 +423,7 @@ export class FormpdExtractionProcessor extends WorkerHost {
       const response = await this.iaService.execute({
         task: 'FORMPD_EXTRACTION', content: chunk,
         chunkContext: { index: i, total: chunks.length },
+        contextHint: deterministicHint || undefined,
       });
       await this.updateChunkProgress(batchId, i + 1, chunks.length, fileId, fileJobId, intakeId);
       return response.data;
@@ -463,7 +529,41 @@ export class FormpdExtractionProcessor extends WorkerHost {
     };
   }
 
-  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Merge helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Overwrites AI-extracted fields with deterministic values where the
+   * deterministic parser had HIGH confidence.
+   */
+  private mergeDeterministicIntoAiResult(det: DeterministicFormpdData, aiResult: any): any {
+    const merged = { ...(aiResult ?? {}) };
+
+    merged.company_info = {
+      ...(aiResult?.company_info ?? {}),
+      cnpj:       det.cnpj       ?? aiResult?.company_info?.cnpj ?? null,
+      legal_name: det.legal_name ?? aiResult?.company_info?.legal_name ?? null,
+    };
+
+    if (det.fiscal_year !== null)        merged.fiscal_year        = det.fiscal_year;
+    if (det.fiscal_loss !== null)        merged.fiscal_loss        = det.fiscal_loss;
+    if (det.fiscal_loss_amount !== null) merged.fiscal_loss_amount = det.fiscal_loss_amount;
+
+    if (det.total_rnd_expenditure !== null || det.total_incentives !== null) {
+      merged.fiscal_summary = {
+        ...(aiResult?.fiscal_summary ?? {}),
+        ...(det.total_rnd_expenditure !== null ? { total_rnd_expenditure: det.total_rnd_expenditure } : {}),
+        ...(det.total_incentives !== null      ? { total_benefit_requested: det.total_incentives }    : {}),
+      };
+    }
+
+    if (!merged.representatives?.length && det.representatives.length > 0) {
+      merged.representatives = det.representatives;
+    }
+
+    return merged;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async saveItemAndFinish(
     batchId: number,

@@ -115,11 +115,15 @@ export class AnthropicProvider {
         source: { type: 'base64', media_type: 'application/pdf', data: request.content },
       });
       const instruction = await this.resolvePrompt(request.task, 'TASK_INSTRUCTION');
-      content.push({ type: 'text', text: instruction });
+      const fullInstruction = request.contextHint
+        ? `${request.contextHint}\n\n${instruction}`
+        : instruction;
+      content.push({ type: 'text', text: fullInstruction });
     } else {
       const baseInstruction = await this.resolvePrompt(request.task, 'TASK_INSTRUCTION');
       const instruction     = this.buildChunkInstruction(baseInstruction, request.chunkContext);
-      content.push({ type: 'text', text: `${instruction}\n\n---\n\n${request.content}` });
+      const hintPrefix      = request.contextHint ? `${request.contextHint}\n\n` : '';
+      content.push({ type: 'text', text: `${hintPrefix}${instruction}\n\n---\n\n${request.content}` });
     }
 
     return content;
