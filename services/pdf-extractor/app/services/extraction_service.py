@@ -11,6 +11,7 @@ from app.parsers.company_registry_parser import parse_company_registry
 from app.parsers.projects_parser import parse_projects
 from app.parsers.hr_parser import parse_hr
 from app.parsers.expenses_parser import parse_expenses
+from app.parsers.equipment_parser import parse_equipment
 from app.parsers.company_identification_parser import parse_company_identification
 from app.parsers.receipt_parser import parse_submission_receipt
 from app.parsers.version_detector import detect_formpd_version
@@ -42,9 +43,60 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
     submission_receipt = parse_submission_receipt(text)
     company_identification = parse_company_identification(text)
 
-    # Optional section-level extracts (for future merge into projects)
+    # Optional section-level extracts and merge into projects (by item index).
     _hr = parse_hr(text)
     _expenses = parse_expenses(text)
+    _equipment = parse_equipment(text)
+
+    if projects and _hr:
+        hr_by_project: dict[int, list[dict]] = {}
+        for row in _hr:
+            idx = int(row.get("project_index") or 1)
+            hr_item = {
+                "cpf": row.get("cpf"),
+                "name": row.get("name"),
+                "role": row.get("role") or row.get("qualification"),
+                "qualification": row.get("qualification"),
+                "annual_hours": row.get("annual_hours"),
+                "dedication_type": row.get("dedication_type"),
+                "dedication_pct": row.get("dedication_pct"),
+                "annual_amount": row.get("annual_amount"),
+            }
+            hr_by_project.setdefault(idx, []).append(hr_item)
+
+        for i, p in enumerate(projects, start=1):
+            if hr_by_project.get(i):
+                p["human_resources"] = hr_by_project[i]
+
+    if projects and _expenses:
+        exp_by_project: dict[int, list[dict]] = {}
+        for row in _expenses:
+            idx = int(row.get("project_index") or 1)
+            exp_item = {
+                "category": row.get("category"),
+                "description": row.get("description"),
+                "amount": row.get("amount"),
+            }
+            exp_by_project.setdefault(idx, []).append(exp_item)
+
+        for i, p in enumerate(projects, start=1):
+            if exp_by_project.get(i):
+                p["expenses"] = exp_by_project[i]
+
+    if projects and _equipment:
+        eq_by_project: dict[int, list[dict]] = {}
+        for row in _equipment:
+            idx = int(row.get("project_index") or 1)
+            eq_item = {
+                "origin": row.get("origin"),
+                "description": row.get("description"),
+                "amount": row.get("amount"),
+            }
+            eq_by_project.setdefault(idx, []).append(eq_item)
+
+        for i, p in enumerate(projects, start=1):
+            if eq_by_project.get(i):
+                p["equipment"] = eq_by_project[i]
 
     payload = {
         "is_valid_formpd": False,

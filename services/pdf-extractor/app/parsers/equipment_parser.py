@@ -27,10 +27,19 @@ def _extract_money(value: str) -> float | None:
         return None
 
 
-def parse_expenses(text: str) -> list[dict]:
+def _origin_from_category(category: str) -> str | None:
+    n = _norm(category)
+    if "EQUIPAMENTOS NACIONAIS" in n:
+        return "NACIONAL"
+    if "EQUIPAMENTOS IMPORTADOS" in n:
+        return "IMPORTADO"
+    return None
+
+
+def parse_equipment(text: str) -> list[dict]:
     """
-    Extract expenses by project when available (v3 layout).
-    Returns a flat list with `project_index` so caller can merge into each project.
+    Extract project equipment lines when present (mainly modern v3 layouts).
+    Returns flat rows with `project_index` for merge.
     """
     lines = [_clean(ln) for ln in (text or "").splitlines()]
     lines = [ln for ln in lines if ln]
@@ -45,13 +54,12 @@ def parse_expenses(text: str) -> list[dict]:
     for n, start in enumerate(idxs):
         end = idxs[n + 1] if n + 1 < len(idxs) else len(lines)
         block = lines[start:end]
-
         m = block_re.match(block[0])
         project_idx = int(m.group(1)) if m else (n + 1)
 
         in_items = False
         i = 0
-        while i < len(block):
+        while i < len(block) - 1:
             ln = block[i]
             nln = _norm(ln)
 
@@ -66,33 +74,21 @@ def parse_expenses(text: str) -> list[dict]:
 
             if "RECURSOS HUMANOS ENVOLVIDOS NO PROJETO" in nln:
                 break
-            if "FONTES DE FINANCIAMENTO" in nln and "PROJETO" in nln:
-                i += 1
-                continue
             if "INCENTIVOS FISCAIS DO PROGRAMA" in nln:
-                # end of itemized spend list
                 break
 
-            # Pattern: <category line> followed by line with currency.
-            if i + 1 < len(block):
+            origin = _origin_from_category(ln)
+            if origin:
                 amount = _extract_money(block[i + 1])
-                if amount is not None:
-                    category = ln.strip(" :")
-                    if category and _norm(category) not in {
-                        "DISPENDIO",
-                        "VALOR R$ ANO-BASE",
-                        "VALOR R$ ANO BASE",
-                        "TOTAL",
-                        "TOTAL GERAL",
-                    }:
-                        if amount > 0:
-                            results.append(
-                                {
-                                    "project_index": project_idx,
-                                    "category": category,
-                                    "amount": amount,
-                                }
-                            )
+                if amount is not None and amount > 0:
+                    results.append(
+                        {
+                            "project_index": project_idx,
+                            "origin": origin,
+                            "description": ln.strip(" :"),
+                            "amount": amount,
+                        }
+                    )
                     i += 2
                     continue
 

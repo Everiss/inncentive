@@ -921,6 +921,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                               {reviewItem.projects.map((p: any, i: number) => {
                                 const hrTotal = p.human_resources?.reduce((s: number, hr: any) => s + (hr.annual_amount || 0), 0) ?? 0;
                                 const expTotal = p.expenses?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
+                                const eqTotal = p.equipment?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
                                 return (
                                   <div key={i} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-blue-50 dark:border-slate-700 overflow-hidden">
                                     <button className="w-full flex items-center justify-between p-3 text-left hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
@@ -935,6 +936,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                                       <div className="flex items-center gap-3 shrink-0">
                                         {hrTotal > 0 && <span className="text-xs font-bold text-blue-700 dark:text-blue-300">{fmt(hrTotal)}</span>}
                                         {expTotal > 0 && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{fmt(expTotal)}</span>}
+                                        {eqTotal > 0 && <span className="text-xs font-bold text-amber-700 dark:text-amber-300">{fmt(eqTotal)}</span>}
                                         {expandedProject === i ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                                       </div>
                                     </button>
@@ -994,8 +996,25 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                                                   </div>
                                                 </div>
                                               )}
+                                              {p.equipment?.length > 0 && (
+                                                <div>
+                                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><FileSpreadsheet className="w-3 h-3" /> Equipamentos</p>
+                                                  <div className="flex flex-col gap-1.5">
+                                                    {p.equipment.slice(0, 4).map((eq: any, qi: number) => (
+                                                      <div key={qi} className="flex items-center justify-between p-2 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg text-xs">
+                                                        <div>
+                                                          <p className="text-slate-600 dark:text-slate-400 truncate max-w-[120px]">{eq.description || eq.category || 'Equipamento'}</p>
+                                                          {eq.origin && <p className="text-slate-500">{eq.origin}</p>}
+                                                        </div>
+                                                        <p className="font-bold text-amber-700 dark:text-amber-400 shrink-0">{fmt(eq.amount)}</p>
+                                                      </div>
+                                                    ))}
+                                                    {p.equipment.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.equipment.length - 4}</p>}
+                                                  </div>
+                                                </div>
+                                              )}
                                             </div>
-                                            {!p.description && !(p.human_resources?.length > 0) && !(p.expenses?.length > 0) && (
+                                            {!p.description && !(p.human_resources?.length > 0) && !(p.expenses?.length > 0) && !(p.equipment?.length > 0) && (
                                               <p className="text-xs text-slate-500">Sem detalhes adicionais para este projeto.</p>
                                             )}
                                           </div>
