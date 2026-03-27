@@ -135,6 +135,10 @@ Responsabilidade:
 - extracao deterministica de PDF FORMPD,
 - parser estruturado sem IA,
 - sinalizacao de campos faltantes para IA complementar.
+- parse de despesas com regra hierarquica:
+  - tabela identada (`ITENS DE DISPENDIO`)
+  - somente nos folha com valor > 0 entram em `projects[].expenses`
+  - itens agregadores (nivel pai) nao sao persistidos para evitar dupla contagem.
 
 Variavel chave:
 
@@ -273,6 +277,7 @@ docker compose ps
 2. `import-service` resolve template e parseia linhas.
 3. `import-service` grava lote/linhas/eventos no banco `new_tax_imports`.
 4. Para FORMPD/PDF, backend continua orquestrando `file-hub` + `pdf-extractor` + `ai-service`.
+   - na aprovacao, backend aplica deduplicacao defensiva de despesas por projeto (categoria+descricao+valor).
 5. Upload FORMP&D IA via modal esta temporariamente desativado na UI.
 
 ### 8.2 Observabilidade

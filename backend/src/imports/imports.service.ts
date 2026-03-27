@@ -67,6 +67,59 @@ export class ImportsService {
     return null;
   }
 
+  private parseDateLoose(raw: unknown): Date | null {
+    if (raw === null || raw === undefined) return null;
+    const text = String(raw).trim();
+    if (!text) return null;
+
+    const iso = new Date(text);
+    if (!Number.isNaN(iso.getTime())) return iso;
+
+    const dmy = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (dmy) {
+      const d = Number(dmy[1]);
+      const m = Number(dmy[2]);
+      const y = Number(dmy[3]);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      if (!Number.isNaN(dt.getTime())) return dt;
+    }
+
+    const yearOnly = text.match(/\b(20\d{2})\b/);
+    if (yearOnly) {
+      const y = Number(yearOnly[1]);
+      const dt = new Date(Date.UTC(y, 0, 1));
+      if (!Number.isNaN(dt.getTime())) return dt;
+    }
+    return null;
+  }
+
+  private parsePbPaOrDe(raw: unknown): number | null {
+    if (raw === null || raw === undefined) return null;
+    const t = String(raw).toUpperCase();
+    if (t.includes('PESQUISA_BASICA') || /\bPB\b/.test(t)) return 1;
+    if (t.includes('PESQUISA_APLICADA') || /\bPA\b/.test(t)) return 2;
+    if (t.includes('DESENVOLVIMENTO_EXPERIMENTAL') || /\bDE\b/.test(t)) return 3;
+    return null;
+  }
+
+  private mapExpenseCategory(raw: unknown):
+    | 'SERVICO_APOIO_PF'
+    | 'SERVICO_APOIO_PJ'
+    | 'MATERIAL_CONSUMO'
+    | 'TIB'
+    | 'DESPESA_OPERACIONAL'
+    | null {
+    if (raw === null || raw === undefined) return null;
+    const t = String(raw).toLowerCase();
+    if (!t.trim()) return null;
+    if (t.includes('material')) return 'MATERIAL_CONSUMO';
+    if (t.includes('tecnologia industrial') || t.includes('tib')) return 'TIB';
+    if (t.includes('pessoa jur') || t.includes('terceiros contratad')) return 'SERVICO_APOIO_PJ';
+    if (t.includes('apoio tecnico') || t.includes('servico de apoio')) return 'SERVICO_APOIO_PF';
+    if (t.includes('servicos de terceiros')) return 'DESPESA_OPERACIONAL';
+    return 'DESPESA_OPERACIONAL';
+  }
+
   private safeJsonParse<T = any>(value: string | null | undefined, fallback: T): T {
     try {
       return value ? (JSON.parse(value) as T) : fallback;
@@ -550,16 +603,97 @@ export class ImportsService {
     for (const p of projects) {
       const title = String(p?.title || 'Projeto sem titulo').trim() || 'Projeto sem titulo';
       const description = String(p?.description || 'Descricao nao informada').trim() || 'Descricao nao informada';
-      await this.prisma.formpd_projects.create({
+      const createdProject = await this.prisma.formpd_projects.create({
         data: {
           form_id: form.id,
           title,
           description,
           category: p?.category ? String(p.category) : null,
+          item_number: this.parseLooseInt(p?.item_number),
+          is_continuous: this.parseLooseBool(p?.is_continuous) ?? false,
+          start_date: this.parseDateLoose(p?.start_date),
+          end_date: this.parseDateLoose(p?.end_date),
+          tech_area_code: p?.tech_area_code ? String(p.tech_area_code).slice(0, 10) : null,
+          tech_area_label: p?.tech_area_label ? String(p.tech_area_label).slice(0, 200) : null,
+          knowledge_area: p?.knowledge_area ? String(p.knowledge_area).slice(0, 255) : null,
+          specific_area: p?.specific_area ? String(p.specific_area).slice(0, 500) : null,
+          keywords_1: p?.keywords_1 ? String(p.keywords_1) : null,
+          keywords_2: p?.keywords_2 ? String(p.keywords_2) : null,
+          keywords_3: p?.keywords_3 ? String(p.keywords_3) : null,
+          keywords_4: p?.keywords_4 ? String(p.keywords_4) : null,
+          keywords_5: p?.keywords_5 ? String(p.keywords_5) : null,
+          innovative_element: p?.innovative_element ? String(p.innovative_element) : null,
+          innovative_challenge: p?.innovative_challenge ? String(p.innovative_challenge) : null,
+          methodology: p?.methodology ? String(p.methodology) : null,
+          additional_info: p?.additional_info ? String(p.additional_info) : null,
+          economic_result_obtained: p?.economic_result_obtained ? String(p.economic_result_obtained) : null,
+          innovation_result_obtained: p?.innovation_result_obtained ? String(p.innovation_result_obtained) : null,
+          trl_initial: this.parseLooseInt(p?.trl_initial),
+          trl_final: this.parseLooseInt(p?.trl_final),
+          pb_pa_or_de: this.parsePbPaOrDe(p?.pb_pa_or_de ?? p?.category),
+          aligns_public_policy: this.parseLooseBool(p?.aligns_public_policy),
+          public_policy_ref: p?.public_policy_ref ? String(p.public_policy_ref).slice(0, 500) : null,
           extraction_source: 'DETERMINISTIC',
           project_status: 'RASCUNHO',
         },
       });
+
+      const hrs = Array.isArray(p?.human_resources) ? p.human_resources : [];
+      if (hrs.length) {
+        await this.prisma.formpd_project_human_resources.createMany({
+          data: hrs
+            .map((hr: any) => ({
+              project_id: createdProject.id,
+              name: String(hr?.name || '').trim(),
+              cpf: hr?.cpf ? String(hr.cpf).replace(/\D/g, '').slice(0, 14) : null,
+              role: hr?.role ? String(hr.role).slice(0, 255) : null,
+              dedication_pct: this.parseBrCurrency(hr?.dedication_pct),
+              is_exclusive_researcher: String(hr?.dedication_type || '').toLowerCase().includes('exclus'),
+              annual_amount: this.parseBrCurrency(hr?.annual_amount),
+            }))
+            .filter((hr) => hr.name.length > 0),
+          skipDuplicates: false,
+        });
+      }
+
+      const expenses = Array.isArray(p?.expenses) ? p.expenses : [];
+      if (expenses.length) {
+        const seenExpenseKeys = new Set<string>();
+        await this.prisma.formpd_project_expenses.createMany({
+          data: expenses
+            .map((exp: any) => ({
+              project_id: createdProject.id,
+              expense_category: this.mapExpenseCategory(exp?.category) ?? 'DESPESA_OPERACIONAL',
+              description: exp?.description ? String(exp.description).slice(0, 500) : (exp?.category ? String(exp.category).slice(0, 500) : null),
+              amount: this.parseBrCurrency(exp?.amount) ?? 0,
+            }))
+            .filter((exp) => {
+              if ((exp.amount ?? 0) <= 0) return false;
+              const key = `${exp.expense_category}|${(exp.description ?? '').toLowerCase().trim()}|${Number(exp.amount ?? 0).toFixed(2)}`;
+              if (seenExpenseKeys.has(key)) return false;
+              seenExpenseKeys.add(key);
+              return true;
+            }),
+          skipDuplicates: false,
+        });
+      }
+
+      const equipment = Array.isArray(p?.equipment) ? p.equipment : [];
+      if (equipment.length) {
+        await this.prisma.formpd_project_equipment.createMany({
+          data: equipment
+            .map((eq: any) => ({
+              project_id: createdProject.id,
+              origin: String(eq?.origin || '').toUpperCase() === 'IMPORTADO' ? 'IMPORTADO' : 'NACIONAL',
+              description: String(eq?.description || eq?.category || 'Equipamento').slice(0, 500),
+              quantity: this.parseLooseInt(eq?.quantity) ?? 1,
+              unit_amount: this.parseBrCurrency(eq?.amount) ?? 0,
+              total_amount: this.parseBrCurrency(eq?.amount) ?? 0,
+            }))
+            .filter((eq) => (eq.total_amount ?? 0) > 0),
+          skipDuplicates: false,
+        });
+      }
     }
 
     const fiscalSummary = (formData.fiscal_summary || {}) as Record<string, any>;

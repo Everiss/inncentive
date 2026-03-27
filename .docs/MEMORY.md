@@ -75,6 +75,17 @@ Impacto:
 - Reducao de fragmentacao de modulos no backend.
 - Manutencao concentrada do dominio de importacao/processamento.
 
+### DT-08 - Despesas FORMPD por nos folha (hierarquia)
+
+Decisao:
+- Em `ITENS DE DISPENDIO`, o parser deve respeitar a hierarquia por indentacao.
+- Apenas nos folha com valor > 0 sao persistidos em `projects[].expenses`.
+- Nivel pai (agregador) nao e persistido como despesa final.
+
+Impacto:
+- Elimina dupla contagem de despesas no card de revisao e na aprovacao.
+- Mantem coerencia com layout oficial do FORMPD (soma dos niveis inferiores).
+
 ## 2. Bugs e aprendizados relevantes
 
 ### BUG-01 - Erro `pdfParse is not a function`
@@ -100,6 +111,15 @@ Causa:
 
 Correcao:
 - Operacoes de `requeue-pending` e `retry-failed` via Queue Admin.
+
+### BUG-04 - Despesas duplicadas em FORMPD
+
+Causa:
+- Parser considerava simultaneamente linha agregadora e linha filha com mesmo valor.
+
+Correcao:
+- Parser de despesas atualizado para manter somente itens folha.
+- Dedupe defensivo adicionado na persistencia de `formpd_project_expenses` na aprovacao.
 
 ## 3. Debitos tecnicos abertos
 

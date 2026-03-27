@@ -12,6 +12,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
+    "backfill:formpd-projects": "ts-node scripts/backfill-formpd-projects.ts",
+    "fix:formpd-expenses": "ts-node scripts/fix-formpd-expenses.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

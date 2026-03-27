@@ -123,6 +123,8 @@ new-tax/
 1. Usuario envia PDF no modal de Forms.
 2. Backend cria `files`, `file_intakes`, `file_jobs` e `import_batches`.
 3. Fila `formpd-deterministic` extrai campos estruturados.
+   - No bloco `ITENS DE DISPENDIO`, o parser considera hierarquia por indentacao.
+   - Apenas itens folha (menor nivel) com valor > 0 sao persistidos como despesas finais.
 4. Batch vai para revisao (`PENDING_REVIEW`) ou pendencia (`COMPANY_NOT_FOUND`, etc.).
 5. Se faltar campo critico, batch pode ficar `NEEDS_AI_EXTRACTION`.
 6. IA e acionada manualmente por `POST /imports/formpd/batches/:id/enqueue-ai`.
@@ -133,3 +135,4 @@ new-tax/
 - O Queue Admin opera filas sem perder rastreabilidade do batch.
 - A timeline de acompanhamento deve usar `/imports/batches/:id/trace` e `/imports/file-jobs/:id/trace`.
 - Prioridade de custo: parser deterministico primeiro, IA somente para interpretacao direcionada.
+- Despesas FORMPD: valores agregados de nivel superior nao devem ser somados novamente na UI/DB.

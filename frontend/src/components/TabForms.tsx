@@ -91,43 +91,43 @@ const normalizeCompanyRegistry = (raw: any) => ({
 
 const COMPANY_IDENT_LABELS: Record<string, string> = {
   company_type: 'Tipo de Empresa',
-  company_status: 'SituaÃ§Ã£o da Empresa',
-  benefits_law_11196_8248: 'BenefÃ­cios Lei 11.196/8.248',
+  company_status: 'Situação da Empresa',
+  benefits_law_11196_8248: 'Benefícios Lei 11.196/8.248',
   capital_origin: 'Origem do Capital',
-  group_relationship: 'RelaÃ§Ã£o com Grupo',
+  group_relationship: 'Relação com Grupo',
   gross_operational_revenue: 'Receita Operacional Bruta',
-  net_revenue: 'Receita LÃ­quida',
-  employee_count_with_contract: 'FuncionÃ¡rios com VÃ­nculo',
-  closed_year_with_tax_loss: 'Fechou Ano com PrejuÃ­zo',
-  irpj_csll_apportionment: 'ApuraÃ§Ã£o IRPJ/CSLL',
+  net_revenue: 'Receita Líquida',
+  employee_count_with_contract: 'Funcionários com Vínculo',
+  closed_year_with_tax_loss: 'Fechou Ano com Prejuízo',
+  irpj_csll_apportionment: 'Apuração IRPJ/CSLL',
   incentives_reason: 'Motivo Incentivos',
   rnd_organizational_structure: 'Estrutura Organizacional P&D',
 };
 
 const COMPANY_REGISTRY_LABELS: Record<string, string> = {
-  situacao_na_receita: 'SituaÃ§Ã£o na Receita',
+  situacao_na_receita: 'Situação na Receita',
   logradouro: 'Logradouro',
-  numero: 'NÃºmero',
+  numero: 'Número',
   sigla: 'Sigla',
-  razao_social: 'RazÃ£o Social',
-  natureza_juridica: 'Natureza JurÃ­dica',
-  data_fundacao: 'Data de FundaÃ§Ã£o',
+  razao_social: 'Razão Social',
+  natureza_juridica: 'Natureza Jurídica',
+  data_fundacao: 'Data de Fundação',
   complemento: 'Complemento',
-  tipo_endereco: 'Tipo de EndereÃ§o',
+  tipo_endereco: 'Tipo de Endereço',
   representante_legal: 'Representante Legal',
   bairro: 'Bairro',
   cnae: 'CNAE',
-  municipio: 'MunicÃ­pio',
-  cod_postal: 'CÃ³digo Postal',
+  municipio: 'Município',
+  cod_postal: 'Código Postal',
   cnpj: 'CNPJ',
   porte_da_empresa: 'Porte da Empresa',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  PESQUISA_BASICA: 'Pesquisa BÃ¡sica',
+  PESQUISA_BASICA: 'Pesquisa Básica',
   PESQUISA_APLICADA: 'Pesquisa Aplicada',
   DESENVOLVIMENTO_EXPERIMENTAL: 'Desenvolvimento Experimental',
-  INOVACAO_TECNOLOGICA: 'InovaÃ§Ã£o TecnolÃ³gica',
+  INOVACAO_TECNOLOGICA: 'Inovação Tecnológica',
 };
 
 type View = 'dashboard' | 'review';
@@ -160,7 +160,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
     try {
       const res = await api.get(`/imports/batches/${batch.id}/items`);
       const item = res.data.data?.[0];
-      if (!item) { toast.error('Sem dados de extraÃ§Ã£o neste lote.'); return; }
+      if (!item) { toast.error('Sem dados de extração neste lote.'); return; }
 
       let parsed: any = {};
       try { parsed = JSON.parse(item.record_data); } catch { /* */ }
@@ -190,7 +190,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
       });
       setView('review');
     } catch {
-      toast.error('Erro ao carregar dados da extraÃ§Ã£o.');
+      toast.error('Erro ao carregar dados da extração.');
     } finally {
       setLoadingReview(false);
     }
@@ -217,7 +217,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
     setDiscarding(true);
     try {
       await api.post(`/imports/formpd/batches/${review.batch.id}/discard`);
-      toast.success('ExtraÃ§Ã£o descartada.');
+      toast.success('Extração descartada.');
       setView('dashboard');
       setReview(null);
       fetchBatches();
@@ -255,15 +255,15 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
 
       if (payload.status === 'CNPJ_MISMATCH') {
         toast.error(
-          `CNPJ do documento nÃ£o pertence a esta empresa. Arquivo movido para a pasta de recusados.`,
+          `CNPJ do documento não pertence a esta empresa. Arquivo movido para a pasta de recusados.`,
           { duration: 8000 }
         );
       } else if (payload.status === 'PENDING_REVIEW') {
-        toast.success('FORMP&D extraÃ­do! Clique em "Revisar" para validar os dados.', { duration: 6000 });
+        toast.success('FORMP&D extraído! Clique em "Revisar" para validar os dados.', { duration: 6000 });
       } else if (payload.status === 'INVALID_FORMPD') {
-        toast.error('O documento nÃ£o foi reconhecido como um FORMP&D vÃ¡lido.', { duration: 8000 });
+        toast.error('O documento não foi reconhecido como um FORMP&D válido.', { duration: 8000 });
       } else if (payload.status === 'ERROR') {
-        toast.error(`Erro na extraÃ§Ã£o: ${payload.errorMessage || 'verifique o arquivo e tente novamente.'}`, { duration: 8000 });
+        toast.error(`Erro na extração: ${payload.errorMessage || 'verifique o arquivo e tente novamente.'}`, { duration: 8000 });
       }
     };
 
@@ -280,7 +280,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
       );
       case 'PENDING_REVIEW': return (
         <span className="px-2 py-1 text-xs font-bold rounded-lg bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400 flex items-center gap-1">
-          <Eye className="w-3 h-3" /> Aguardando revisÃ£o
+          <Eye className="w-3 h-3" /> Aguardando revisão
         </span>
       );
       case 'PROCESSING': return (
@@ -327,13 +327,13 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
           className="self-start flex items-center gap-1.5 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
         >
           <ChevronRight className="w-4 h-4 rotate-180" />
-          Voltar ao histÃ³rico
+          Voltar ao histórico
         </button>
       )}
 
       <AnimatePresence mode="wait">
 
-        {/* â”€â”€ DASHBOARD â”€â”€ */}
+        {/* DASHBOARD */}
         {view === 'dashboard' && (
           <motion.div key="dashboard" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="flex flex-col gap-6">
@@ -341,10 +341,10 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'Total de ExtraÃ§Ãµes', value: stats.total, icon: Layers, color: 'blue' },
+                { label: 'Total de Extrações', value: stats.total, icon: Layers, color: 'blue' },
                 { label: 'Aprovados', value: stats.approved, icon: CheckCircle2, color: 'emerald' },
-                { label: 'Aguardando RevisÃ£o', value: stats.pending, icon: FileClock, color: 'violet' },
-                { label: 'Com DivergÃªncia/Erro', value: stats.errors, icon: AlertCircle, color: 'red' },
+                { label: 'Aguardando Revisão', value: stats.pending, icon: FileClock, color: 'violet' },
+                { label: 'Com Divergência/Erro', value: stats.errors, icon: AlertCircle, color: 'red' },
               ].map(({ label, value, icon: Icon, color }) => (
                 <div key={label} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-blue-50 dark:border-slate-800 flex items-center gap-3">
                   <div className={`w-10 h-10 bg-${color}-50 dark:bg-${color}-900/30 rounded-xl flex items-center justify-center shrink-0`}>
@@ -358,11 +358,11 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
               ))}
             </div>
 
-            {/* HistÃ³rico */}
+            {/* Histórico */}
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-blue-50 dark:border-slate-800 overflow-hidden">
               <div className="p-5 border-b border-blue-50 dark:border-slate-800 flex items-center justify-between">
                 <h4 className="font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4 text-blue-500" /> HistÃ³rico de ExtraÃ§Ãµes
+                  <ClipboardList className="w-4 h-4 text-blue-500" /> Histórico de Extrações
                 </h4>
                 <button onClick={fetchBatches} className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1 hover:underline">
                   <RefreshCw className="w-3 h-3" /> Atualizar
@@ -379,7 +379,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
                   <div className="w-14 h-14 bg-violet-50 dark:bg-violet-900/20 rounded-2xl flex items-center justify-center">
                     <Archive className="w-7 h-7 text-violet-300 dark:text-violet-700" />
                   </div>
-                  <p className="font-semibold text-blue-900 dark:text-slate-200">Nenhuma extraÃ§Ã£o para esta empresa</p>
+                  <p className="font-semibold text-blue-900 dark:text-slate-200">Nenhuma extração para esta empresa</p>
                   <p className="text-sm text-slate-500">Acesse o menu FORMs para importar novos arquivos.</p>
                 </div>
               ) : (
@@ -390,7 +390,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
                       <th className="px-5 py-3 text-xs font-semibold text-blue-600 dark:text-slate-400 uppercase tracking-wider">Arquivo</th>
                       <th className="px-5 py-3 text-xs font-semibold text-blue-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
                       <th className="px-5 py-3 text-xs font-semibold text-blue-600 dark:text-slate-400 uppercase tracking-wider">Data</th>
-                      <th className="px-5 py-3 text-xs font-semibold text-blue-600 dark:text-slate-400 uppercase tracking-wider text-center">AÃ§Ãµes</th>
+                      <th className="px-5 py-3 text-xs font-semibold text-blue-600 dark:text-slate-400 uppercase tracking-wider text-center">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-blue-50 dark:divide-slate-800/60">
@@ -436,7 +436,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
           </motion.div>
         )}
 
-        {/* â”€â”€ REVIEW â”€â”€ */}
+        {/* REVIEW */}
         {view === 'review' && (
           <motion.div key="review" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="flex flex-col gap-5">
@@ -468,7 +468,7 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
   );
 }
 
-// â”€â”€â”€ Review Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Review Panel
 
 function ReviewPanel({
   review, cnpj, expandedProject, setExpandedProject, approving, discarding, enqueueingAi, onApprove, onDiscard, onEnqueueAi,
@@ -495,14 +495,14 @@ function ReviewPanel({
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
           <p className="text-xs text-slate-500">Ano Fiscal</p>
-          <p className="text-3xl font-black text-blue-900 dark:text-slate-100">{formData.fiscal_year || 'â€”'}</p>
+          <p className="text-3xl font-black text-blue-900 dark:text-slate-100">{formData.fiscal_year || '-'}</p>
         </div>
         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
           <p className="text-xs text-slate-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Projetos</p>
           <p className="text-3xl font-black text-blue-900 dark:text-slate-100">{formData.projects?.length ?? 0}</p>
         </div>
         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800 col-span-2 md:col-span-1">
-          <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> BenefÃ­cio Solicitado</p>
+          <p className="text-xs text-slate-500 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Benefício Solicitado</p>
           <p className="text-xl font-black text-emerald-700 dark:text-emerald-400">
             {fmt(formData.fiscal_summary?.total_benefit_requested)}
           </p>
@@ -514,12 +514,12 @@ function ReviewPanel({
 
       {(needsAi || (missingFields?.length ?? 0) > 0) && (
         <div className="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-2xl border border-violet-100 dark:border-violet-800">
-          <p className="text-sm font-bold text-violet-800 dark:text-violet-300">IA recomendada por polÃ­tica</p>
+          <p className="text-sm font-bold text-violet-800 dark:text-violet-300">IA recomendada por política</p>
           <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-1">
-            ConfianÃ§a: <span className="font-semibold">{confidence || 'N/A'}</span>
+            Confiança: <span className="font-semibold">{confidence || 'N/A'}</span>
             {detectedFamily ? (
               <>
-                {' '}Â· FamÃ­lia: <span className="font-mono">{detectedFamily}</span>
+                {' '}· Família: <span className="font-mono">{detectedFamily}</span>
               </>
             ) : null}
           </p>
@@ -537,31 +537,31 @@ function ReviewPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <div>
             <p className="text-slate-500">Remetente</p>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">{submissionReceipt?.sender_name || 'â€”'}</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{submissionReceipt?.sender_name || '-'}</p>
           </div>
           <div>
             <p className="text-slate-500">CPF</p>
-            <p className="font-mono text-slate-700 dark:text-slate-200">{submissionReceipt?.sender_cpf || 'â€”'}</p>
+            <p className="font-mono text-slate-700 dark:text-slate-200">{submissionReceipt?.sender_cpf || '-'}</p>
           </div>
           <div>
-            <p className="text-slate-500">ExpediÃ§Ã£o</p>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">{submissionReceipt?.expedition_at || 'â€”'}</p>
+            <p className="text-slate-500">Expedição</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{submissionReceipt?.expedition_at || '-'}</p>
           </div>
           <div>
-            <p className="text-slate-500">CÃ³digo de Autenticidade</p>
-            <p className="font-mono text-slate-700 dark:text-slate-200 break-all">{submissionReceipt?.authenticity_code || 'â€”'}</p>
+            <p className="text-slate-500">Código de Autenticidade</p>
+            <p className="font-mono text-slate-700 dark:text-slate-200 break-all">{submissionReceipt?.authenticity_code || '-'}</p>
           </div>
         </div>
       </div>
 
       <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
-        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Dados Pessoa JurÃ­dica</p>
+        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Dados Pessoa Jurídica</p>
         {Object.keys(companyRegistry?.fields || {}).length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             {Object.entries(companyRegistry?.fields || {}).map(([k, v]) => (
               <div key={k}>
                 <p className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</p>
-                <p className="font-semibold text-slate-700 dark:text-slate-200">{String(v || 'â€”')}</p>
+                <p className="font-semibold text-slate-700 dark:text-slate-200">{String(v || '-')}</p>
               </div>
             ))}
           </div>
@@ -570,15 +570,15 @@ function ReviewPanel({
         )}
       </div>
 
-      {/* IdentificaÃ§Ã£o/CaracterÃ­sticas da Empresa */}
+      {/* Identificação/Características da Empresa */}
       <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
-        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">IdentificaÃ§Ã£o da Empresa</p>
+        <p className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-3">Identificação da Empresa</p>
         {Object.keys(companyIdentification?.fields || {}).length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             {Object.entries(companyIdentification?.fields || {}).map(([k, v]) => (
               <div key={k}>
                 <p className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</p>
-                <p className="font-semibold text-slate-700 dark:text-slate-200">{String(v || 'â€”')}</p>
+                <p className="font-semibold text-slate-700 dark:text-slate-200">{String(v || '-')}</p>
               </div>
             ))}
           </div>
@@ -592,7 +592,7 @@ function ReviewPanel({
         <div className="flex flex-col gap-3">
           <h4 className="text-sm font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
             <ClipboardList className="w-4 h-4 text-blue-500" />
-            Projetos ExtraÃ­dos ({formData.projects.length})
+            Projetos Extraídos ({formData.projects.length})
           </h4>
 
           {formData.projects.map((proj: any, i: number) => {
@@ -611,7 +611,7 @@ function ReviewPanel({
                       <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{proj.title}</p>
                       <p className="text-xs text-slate-500">
                         {CATEGORY_LABELS[proj.category] || proj.category}
-                        {proj.is_continuous && ' Â· Projeto ContÃ­nuo'}
+                        {proj.is_continuous && ' · Projeto Contínuo'}
                       </p>
                     </div>
                   </div>
@@ -696,7 +696,7 @@ function ReviewPanel({
         </div>
       )}
 
-      {/* AÃ§Ãµes */}
+      {/* Ações */}
       {!isApproved && (
         <div className="flex gap-3 pt-2 sticky bottom-0 bg-transparent">
           {(needsAi || (missingFields?.length ?? 0) > 0) && (
@@ -723,7 +723,7 @@ function ReviewPanel({
             className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
-            {!cnpjMatch && cnpjFromForm ? 'AprovaÃ§Ã£o Bloqueada â€” CNPJ divergente' : 'Aprovar e Salvar'}
+            {!cnpjMatch && cnpjFromForm ? 'Aprovação Bloqueada - CNPJ divergente' : 'Aprovar e Salvar'}
           </button>
         </div>
       )}

@@ -50,6 +50,9 @@ Plataforma SaaS para gestao de incentivos fiscais da Lei do Bem, com foco em:
 - RN-03: Todo upload deve ter rastreabilidade ponta a ponta.
 - RN-04: Reprocessamento deve respeitar idempotencia por arquivo/hash.
 - RN-05: Acionamento de IA deve ser auditavel (quem, quando, para quais campos).
+- RN-06: No bloco `ITENS DE DISPENDIO`, a persistencia deve considerar hierarquia por indentacao.
+- RN-07: Apenas despesas de menor nivel (folha) com valor positivo compoem o total final do projeto.
+- RN-08: Linhas agregadas (nivel superior) nao podem gerar duplicidade de valor em revisao/aprovacao.
 
 ## 4. Monitoramento operacional
 
