@@ -7,9 +7,11 @@ import {
   Eye, Layers, ChevronRight, Sparkles, Archive, FileClock,
   DollarSign, ChevronDown, ChevronUp, ClipboardList,
   ShieldAlert, ThumbsDown, ThumbsUp,
-  TrendingUp, Users, Loader2,
+  TrendingUp, Users, Loader2, LayoutGrid,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ScorePanel, type ExtractionScore } from './ui/ScorePanel';
+import StructureCheckPanel from './StructureCheckPanel';
 
 interface Props {
   companyId: number;
@@ -41,19 +43,6 @@ interface FormpdCompletedPayload {
   companyId: number | null;
   companyName: string | null;
   errorMessage?: string;
-}
-
-interface ExtractionScore {
-  score_pct: number;
-  score_band: 'HIGH' | 'MEDIUM' | 'LOW';
-  completeness: number;
-  confidence: number;
-  cross_validation: number;
-  missing_mandatory: string[];
-  cv_results: Record<string, boolean | null>;
-  needs_ai: boolean;
-  ai_priority_fields: string[];
-  profile: string;
 }
 
 interface ReviewData {
@@ -249,7 +238,9 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
     setEnqueueingAi(true);
     try {
       await api.post(`/imports/formpd/batches/${review.batch.id}/enqueue-ai`, {
-        fields: review.missingFields || [],
+        fields: review.score?.ai_priority_fields?.length
+          ? review.score.ai_priority_fields
+          : review.missingFields || [],
       });
       toast.success('IA enfileirada para completar os campos faltantes.');
       fetchBatches();
@@ -484,127 +475,6 @@ export default function TabImportacaoIA({ companyId, cnpj }: Props) {
   );
 }
 
-// Score Panel
-
-const BAND_CONFIG = {
-  HIGH:   { label: 'Alta',   bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-700 dark:text-emerald-300', bar: 'bg-emerald-500' },
-  MEDIUM: { label: 'Média',  bg: 'bg-amber-50 dark:bg-amber-900/20',     border: 'border-amber-200 dark:border-amber-800',     text: 'text-amber-700 dark:text-amber-300',     bar: 'bg-amber-500' },
-  LOW:    { label: 'Baixa',  bg: 'bg-red-50 dark:bg-red-900/20',         border: 'border-red-200 dark:border-red-800',         text: 'text-red-700 dark:text-red-300',         bar: 'bg-red-500' },
-} as const;
-
-const CV_LABELS: Record<string, string> = {
-  'CV-01': 'CNPJ válido',
-  'CV-02': 'Ano fiscal',
-  'CV-03': 'Recibo completo',
-  'CV-04': 'Despesas presentes',
-  'CV-05': 'Qtd. projetos',
-  'CV-06': 'Total financeiro',
-  'CV-07': 'Cód. autenticidade',
-  'CV-08': 'RH presente',
-  'CV-09': 'Categoria válida',
-};
-
-function MiniBar({ value, barClass }: { value: number; barClass: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${barClass}`} style={{ width: `${Math.round(value * 100)}%` }} />
-      </div>
-      <span className="text-[10px] font-bold text-slate-500 w-7 text-right">{Math.round(value * 100)}%</span>
-    </div>
-  );
-}
-
-function ScorePanel({ score, detectedFamily }: { score: ExtractionScore; detectedFamily?: string | null }) {
-  const cfg = BAND_CONFIG[score.score_band] ?? BAND_CONFIG.LOW;
-  const failedCVs = Object.entries(score.cv_results).filter(([, v]) => v === false);
-  const [showCV, setShowCV] = useState(false);
-
-  return (
-    <div className={`rounded-2xl border p-4 flex flex-col gap-3 ${cfg.bg} ${cfg.border}`}>
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className={`text-sm font-bold ${cfg.text}`}>
-            Qualidade da Extração
-          </p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {score.profile && <span className="font-mono">{score.profile}</span>}
-            {detectedFamily && score.profile !== detectedFamily && (
-              <> · <span className="font-mono">{detectedFamily}</span></>
-            )}
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <p className={`text-3xl font-black ${cfg.text}`}>{score.score_pct.toFixed(0)}<span className="text-base font-semibold">%</span></p>
-          <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold ${cfg.text} ${cfg.bg} border ${cfg.border}`}>
-            {cfg.label}
-          </span>
-        </div>
-      </div>
-
-      {/* Metric bars */}
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        {[
-          { label: 'Completude', value: score.completeness, barClass: cfg.bar },
-          { label: 'Confiança',  value: score.confidence,   barClass: cfg.bar },
-          { label: 'Validações', value: score.cross_validation, barClass: cfg.bar },
-        ].map(({ label, value, barClass }) => (
-          <div key={label} className="flex flex-col gap-1">
-            <span className="text-slate-500 font-medium">{label}</span>
-            <MiniBar value={value} barClass={barClass} />
-          </div>
-        ))}
-      </div>
-
-      {/* Missing mandatory fields */}
-      {score.missing_mandatory.length > 0 && (
-        <div>
-          <p className="text-xs font-bold text-slate-500 mb-1.5">Campos obrigatórios ausentes</p>
-          <div className="flex flex-wrap gap-1.5">
-            {score.ai_priority_fields.slice(0, 8).map(f => (
-              <span key={f} className="px-2 py-0.5 rounded-lg bg-white/60 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-400">
-                {f}
-              </span>
-            ))}
-            {score.ai_priority_fields.length > 8 && (
-              <span className="text-[10px] text-slate-400">+{score.ai_priority_fields.length - 8}</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* CV failures (collapsible) */}
-      {failedCVs.length > 0 && (
-        <div>
-          <button
-            onClick={() => setShowCV(v => !v)}
-            className={`text-xs font-semibold flex items-center gap-1 ${cfg.text}`}
-          >
-            {showCV ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            {failedCVs.length} validação{failedCVs.length > 1 ? 'ões' : ''} falharam
-          </button>
-          {showCV && (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {failedCVs.map(([k]) => (
-                <span key={k} className="px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-[10px] font-semibold text-red-700 dark:text-red-400">
-                  {CV_LABELS[k] ?? k}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {score.needs_ai && (
-        <p className={`text-xs font-semibold flex items-center gap-1 ${cfg.text}`}>
-          <Sparkles className="w-3 h-3" /> IA recomendada para completar os campos faltantes
-        </p>
-      )}
-    </div>
-  );
-}
-
 // Review Panel
 
 function ReviewPanel({
@@ -625,9 +495,28 @@ function ReviewPanel({
   const normalizedCnpj = cnpj.replace(/\D/g, '');
   const cnpjMatch = !!cnpjFromForm && cnpjFromForm === normalizedCnpj;
   const isApproved = review.batch.status === 'APPROVED';
+  const [showStructureCheck, setShowStructureCheck] = useState(false);
 
   return (
     <>
+      {/* Structure Check */}
+      <button
+        onClick={() => setShowStructureCheck(true)}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border-2 border-dashed border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-sm font-semibold transition-colors"
+      >
+        <LayoutGrid className="w-4 h-4" />
+        Structure Check — visualizar grafo no documento
+      </button>
+
+      {showStructureCheck && (
+        <StructureCheckPanel
+          batchId={review.batch.id}
+          formData={formData}
+          fileName={review.batch.file_name}
+          onClose={() => setShowStructureCheck(false)}
+        />
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-blue-50 dark:border-slate-800">
@@ -745,10 +634,22 @@ function ReviewPanel({
                     <div className="w-9 h-9 bg-blue-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-sm font-black text-blue-600 shrink-0">{i + 1}</div>
                     <div>
                       <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{proj.title}</p>
-                      <p className="text-xs text-slate-500">
-                        {CATEGORY_LABELS[proj.category] || proj.category}
-                        {proj.is_continuous && ' · Projeto Contínuo'}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        <span className="text-xs text-slate-500">
+                          {CATEGORY_LABELS[proj.category] || proj.category}
+                        </span>
+                        {proj.is_continuous && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-semibold">Contínuo</span>
+                        )}
+                        {proj.trl_initial != null && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold font-mono">
+                            TRL {proj.trl_initial}{proj.trl_final != null ? `→${proj.trl_final}` : ''}
+                          </span>
+                        )}
+                        {proj.nature && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">{proj.nature}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 shrink-0">
@@ -770,62 +671,88 @@ function ReviewPanel({
                   </div>
                 </button>
 
-                <AnimatePresence>
-                  {expandedProject === i && (
-                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
-                      className="overflow-hidden border-t border-blue-50 dark:border-slate-800">
-                      <div className="p-4 flex flex-col gap-4">
-                        {proj.description && (
-                          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{proj.description}</p>
-                        )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {proj.human_resources?.length > 0 && (
-                            <div>
-                              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <Users className="w-3 h-3" /> Recursos Humanos ({proj.human_resources.length})
-                              </p>
-                              <div className="flex flex-col gap-1.5">
-                                {proj.human_resources.slice(0, 5).map((hr: any, hi: number) => (
-                                  <div key={hi} className="flex items-center justify-between p-2 bg-blue-50/50 dark:bg-slate-800/50 rounded-xl text-xs">
-                                    <div>
-                                      <p className="font-semibold text-blue-900 dark:text-slate-100 truncate max-w-[140px]">{hr.name}</p>
-                                      {hr.role && <p className="text-slate-500">{hr.role}</p>}
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      {hr.annual_amount && <p className="font-bold text-blue-700 dark:text-blue-300">{fmt(hr.annual_amount)}</p>}
-                                      {hr.dedication_pct && <p className="text-slate-400">{hr.dedication_pct}%</p>}
-                                    </div>
+                <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${expandedProject === i ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                  <div className="overflow-hidden">
+                    <div className="border-t border-blue-50 dark:border-slate-800 p-4 flex flex-col gap-4">
+                      {proj.description && (
+                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{proj.description}</p>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {proj.human_resources?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <Users className="w-3 h-3" /> RH ({proj.human_resources.length})
+                            </p>
+                            <div className="flex flex-col gap-1.5">
+                              {proj.human_resources.map((hr: any, hi: number) => (
+                                <div key={hi} className="flex items-center justify-between p-2 bg-blue-50/50 dark:bg-slate-800/50 rounded-xl text-xs">
+                                  <div>
+                                    <p className="font-semibold text-blue-900 dark:text-slate-100 truncate max-w-[140px]">{hr.name}</p>
+                                    {hr.role && <p className="text-slate-500">{hr.role}</p>}
                                   </div>
-                                ))}
-                                {proj.human_resources.length > 5 && (
-                                  <p className="text-xs text-slate-400 text-center">+{proj.human_resources.length - 5} colaboradores</p>
-                                )}
-                              </div>
+                                  <div className="text-right shrink-0">
+                                    {hr.annual_amount && <p className="font-bold text-blue-700 dark:text-blue-300">{fmt(hr.annual_amount)}</p>}
+                                    {hr.dedication_pct && <p className="text-slate-400">{hr.dedication_pct}%</p>}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          )}
-                          {proj.expenses?.length > 0 && (
-                            <div>
-                              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <DollarSign className="w-3 h-3" /> Despesas ({proj.expenses.length})
-                              </p>
-                              <div className="flex flex-col gap-1.5">
-                                {proj.expenses.slice(0, 5).map((exp: any, ei: number) => (
-                                  <div key={ei} className="flex items-center justify-between p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl text-xs">
-                                    <p className="text-slate-600 dark:text-slate-400 truncate max-w-[140px]">{exp.category || exp.description}</p>
+                          </div>
+                        )}
+                        {proj.expenses?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <DollarSign className="w-3 h-3" /> Despesas ({proj.expenses.length})
+                            </p>
+                            <div className="flex flex-col gap-1.5">
+                              {proj.expenses.map((exp: any, ei: number) => (
+                                <div key={ei} className="p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl text-xs">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      {exp.supplier_name ? (
+                                        <p className="font-semibold text-slate-700 dark:text-slate-300 truncate">{exp.supplier_name}</p>
+                                      ) : (
+                                        <p className="text-slate-600 dark:text-slate-400 truncate">{exp.category || exp.description}</p>
+                                      )}
+                                      {exp.supplier_cnpj_raw && (
+                                        <p className="font-mono text-slate-400 dark:text-slate-500 text-[10px]">{exp.supplier_cnpj_raw}</p>
+                                      )}
+                                      {exp.supplier_name && exp.category && (
+                                        <p className="text-slate-400 dark:text-slate-500 truncate text-[10px]">{exp.category}</p>
+                                      )}
+                                    </div>
                                     <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
                                   </div>
-                                ))}
-                                {proj.expenses.length > 5 && (
-                                  <p className="text-xs text-slate-400 text-center">+{proj.expenses.length - 5} despesas</p>
-                                )}
-                              </div>
+                                </div>
+                              ))}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
+                        {proj.equipment?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <Layers className="w-3 h-3" /> Equipamentos ({proj.equipment.length})
+                            </p>
+                            <div className="flex flex-col gap-1.5">
+                              {proj.equipment.map((eq: any, qi: number) => (
+                                <div key={qi} className="flex items-center justify-between p-2 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl text-xs">
+                                  <div>
+                                    <p className="text-slate-600 dark:text-slate-400 truncate max-w-[140px]">{eq.description || eq.category || 'Equipamento'}</p>
+                                    {eq.origin && <p className="text-slate-500">{eq.origin}</p>}
+                                  </div>
+                                  <p className="font-bold text-amber-700 dark:text-amber-400 shrink-0">{fmt(eq.amount)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                      {!proj.description && !(proj.human_resources?.length > 0) && !(proj.expenses?.length > 0) && !(proj.equipment?.length > 0) && (
+                        <p className="text-xs text-slate-500">Sem detalhes adicionais extraídos para este projeto.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })}

@@ -7,10 +7,12 @@ import {
   RefreshCw, Eye, Calendar, TrendingUp, Sparkles, Upload,
   Bell, Loader2, ShieldCheck, X, ThumbsUp, ThumbsDown,
   Layers, DollarSign, ChevronDown, ChevronUp, ClipboardList, Users,
-  HelpCircle, Send, FileClock, FileCheck, Zap,
+  HelpCircle, Send, FileClock, FileCheck, Zap, CheckCheck, LayoutGrid,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FormpdAiUpload from './FormpdAiUpload';
+import { ScorePanel, type ExtractionScore } from './ui/ScorePanel';
+import StructureCheckPanel from './StructureCheckPanel';
 
 // ─── Types from DB ────────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ interface PendingBatch {
   status: PendingBatchStatus;
   company_id: number | null;
   created_at: string;
+  scoreBand?: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
 interface FormpdCompletedPayload {
@@ -76,6 +79,7 @@ interface ReviewItem {
   needsAi?: boolean;
   missingFields?: string[];
   detectedFamily?: string | null;
+  score?: ExtractionScore | null;
   submissionReceipt?: {
     sender_name?: string | null;
     sender_cpf?: string | null;
@@ -167,6 +171,28 @@ const CATEGORY_LABELS: Record<string, string> = {
   INOVACAO_TECNOLOGICA: 'Inovação Tecnológica',
 };
 
+const PENDING_SORT_ORDER: Record<PendingBatchStatus, number> = {
+  COMPANY_NOT_FOUND: 0,
+  PENDING_REVIEW: 1,
+  AWAITING_COMPANY: 2,
+};
+
+const SCORE_BAND_CONFIG: Record<string, { label: string; dot: string }> = {
+  HIGH:   { label: 'Alta',  dot: 'bg-emerald-500' },
+  MEDIUM: { label: 'Média', dot: 'bg-amber-500' },
+  LOW:    { label: 'Baixa', dot: 'bg-red-500' },
+};
+
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'agora';
+  if (mins < 60) return `há ${mins}min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `há ${hrs}h`;
+  return `há ${Math.floor(hrs / 24)}d`;
+}
+
 const FORM_STATUS_CONFIG: Record<FormpdForm['status'], { label: string; color: string; icon: any }> = {
   NAO_PREENCHIDO:    { label: 'Não preenchido',    color: 'slate',   icon: Clock },
   EM_PREENCHIMENTO:  { label: 'Em preenchimento',  color: 'blue',    icon: FileClock },
@@ -182,6 +208,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [reviewItem, setReviewItem] = useState<ReviewItem | null>(null);
+  const [structureCheck, setStructureCheck] = useState<ReviewItem | null>(null);
   const [expandedProject, setExpandedProject] = useState<number | null>(null);
   const [collapsedCards, setCollapsedCards] = useState({
     receipt: true,
@@ -250,6 +277,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
         parsed.company_registry || formData.company_registry || {},
       );
       const detectedFamily = parsed?.meta?.detected_version?.family ?? null;
+      const score: ExtractionScore | null = parsed?.meta?.quality_policy?.score ?? null;
 
       setReviewItem({
         batchId,
@@ -266,10 +294,17 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
         needsAi: Boolean(parsed.needs_ai),
         missingFields: Array.isArray(parsed.missing_fields) ? parsed.missing_fields : [],
         detectedFamily,
+        score,
         submissionReceipt,
         companyIdentification,
         companyRegistry,
       });
+      // Enrich pending batch with score band for the banner
+      if (score?.score_band) {
+        setPendingBatches(prev =>
+          prev.map(b => b.id === batchId ? { ...b, scoreBand: score.score_band } : b)
+        );
+      }
       setExpandedProject(null);
       setCollapsedCards({
         receipt: true,
@@ -323,7 +358,9 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
     setEnqueueingAi(true);
     try {
       await api.post(`/imports/formpd/batches/${reviewItem.batchId}/enqueue-ai`, {
-        fields: reviewItem.missingFields || [],
+        fields: reviewItem.score?.ai_priority_fields?.length
+          ? reviewItem.score.ai_priority_fields
+          : reviewItem.missingFields || [],
       });
       toast.success('IA enfileirada para completar os campos faltantes.');
       fetchPendingBatches();
@@ -467,6 +504,18 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
     };
   }, [fetchAll, fetchForms, fetchPendingBatches, openBatchReview]);
 
+  // Close review modal on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setReviewItem(null);
+        setPendingDecision(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // ── Derived stats ──────────────────────────────────────────────────────────
 
   const stats = {
@@ -511,37 +560,46 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
             </p>
           </div>
           <div className="flex flex-col gap-2">
-            {pendingBatches.map(batch => (
-              <div key={batch.id} className="flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-100 dark:border-amber-800/50">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs font-bold text-slate-400 shrink-0">#{batch.id}</span>
-                  <p className="text-sm font-semibold text-blue-900 dark:text-slate-100 truncate">{batch.file_name}</p>
-                  {batch.status === 'AWAITING_COMPANY' && (
-                    <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 shrink-0">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Cadastrando empresa...
-                    </span>
-                  )}
-                  {batch.status === 'COMPANY_NOT_FOUND' && (
-                    <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0">Empresa desconhecida</span>
-                  )}
+            {[...pendingBatches]
+              .sort((a, b) => PENDING_SORT_ORDER[a.status] - PENDING_SORT_ORDER[b.status])
+              .map(batch => (
+                <div key={batch.id} className="flex items-center justify-between gap-3 p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-100 dark:border-amber-800/50">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-xs font-bold text-slate-400 shrink-0">#{batch.id}</span>
+                    <p className="text-sm font-semibold text-blue-900 dark:text-slate-100 truncate">{batch.file_name}</p>
+                    {batch.status === 'AWAITING_COMPANY' && (
+                      <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 shrink-0">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Cadastrando...
+                      </span>
+                    )}
+                    {batch.status === 'COMPANY_NOT_FOUND' && (
+                      <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0 font-semibold">Empresa desconhecida</span>
+                    )}
+                    {batch.scoreBand && SCORE_BAND_CONFIG[batch.scoreBand] && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 shrink-0">
+                        <span className={`w-1.5 h-1.5 rounded-full ${SCORE_BAND_CONFIG[batch.scoreBand].dot}`} />
+                        {SCORE_BAND_CONFIG[batch.scoreBand].label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] text-slate-400 hidden sm:block">{relativeTime(batch.created_at)}</span>
+                    {batch.status === 'PENDING_REVIEW' && (
+                      <button onClick={() => openBatchReview(batch.id)}
+                        className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+                        <Eye className="w-3 h-3" /> Revisar
+                      </button>
+                    )}
+                    {batch.status === 'COMPANY_NOT_FOUND' && (
+                      <button
+                        onClick={() => setPendingDecision({ batchId: batch.id, cnpj: '', fileName: batch.file_name })}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
+                        <HelpCircle className="w-3 h-3" /> Decidir
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  {batch.status === 'PENDING_REVIEW' && (
-                    <button onClick={() => openBatchReview(batch.id)}
-                      className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
-                      <Eye className="w-3 h-3" /> Revisar
-                    </button>
-                  )}
-                  {batch.status === 'COMPANY_NOT_FOUND' && (
-                    <button
-                      onClick={() => setPendingDecision({ batchId: batch.id, cnpj: '', fileName: batch.file_name })}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
-                      <HelpCircle className="w-3 h-3" /> Decidir
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
@@ -716,7 +774,15 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
               <div className="flex-1 min-w-0 bg-slate-800 flex flex-col">
                 <div className="flex items-center gap-3 px-4 py-3 bg-slate-900/80 border-b border-slate-700">
                   <div className="w-2 h-2 rounded-full bg-violet-400" />
-                  <span className="text-xs font-mono text-slate-400 truncate">{reviewItem.fileName}</span>
+                  <span className="text-xs font-mono text-slate-400 truncate flex-1">{reviewItem.fileName}</span>
+                  <button
+                    onClick={() => setStructureCheck(reviewItem)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shrink-0"
+                    title="Visualizar grafo extraído sobreposto ao documento"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    Structure Check
+                  </button>
                 </div>
                 <iframe
                   src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/imports/formpd/batches/${reviewItem.batchId}/pdf`}
@@ -740,26 +806,28 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                 </div>
 
                 {/* Scrollable content */}
-                <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+                <div className="flex-1 min-h-0 overflow-y-auto p-5 flex flex-col gap-4">
                   {/* Extraction quality */}
-                  {(reviewItem.needsAi || (reviewItem.missingFields?.length ?? 0) > 0) && (
+                  {reviewItem.score ? (
+                    <ScorePanel score={reviewItem.score} detectedFamily={reviewItem.detectedFamily} />
+                  ) : (reviewItem.needsAi || (reviewItem.missingFields?.length ?? 0) > 0) ? (
                     <div className="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-2xl border border-violet-200 dark:border-violet-800">
                       <p className="text-sm font-bold text-violet-700 dark:text-violet-300">IA recomendada por política</p>
                       <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-1">
                         Confiança: <span className="font-semibold">{reviewItem.confidence || 'N/A'}</span>
-                        {reviewItem.detectedFamily ? (
-                          <>
-                            {' '}· Família: <span className="font-mono">{reviewItem.detectedFamily}</span>
-                          </>
-                        ) : null}
+                        {reviewItem.detectedFamily && (
+                          <>{' '}· Família: <span className="font-mono">{reviewItem.detectedFamily}</span></>
+                        )}
                       </p>
                       {(reviewItem.missingFields?.length ?? 0) > 0 && (
-                        <p className="text-xs text-violet-700/80 dark:text-violet-400 mt-2 break-words">
-                          Campos faltantes: {(reviewItem.missingFields || []).join(', ')}
-                        </p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {reviewItem.missingFields?.map(f => (
+                            <span key={f} className="px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/40 text-[10px] font-mono text-violet-700 dark:text-violet-300">{f}</span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Company badge */}
                   {reviewItem.companyName ? (
@@ -801,33 +869,50 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                       onClick={() => toggleCard('receipt')}
                       className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
                     >
-                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Recibo de Entrega</p>
-                      {collapsedCards.receipt ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                      <div className="flex flex-col items-start gap-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Recibo de Entrega</p>
+                          {reviewItem.submissionReceipt?.sender_name && reviewItem.submissionReceipt?.sender_cpf && reviewItem.submissionReceipt?.authenticity_code ? (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                              <CheckCheck className="w-3 h-3" /> Completo
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">Incompleto</span>
+                          )}
+                        </div>
+                        {collapsedCards.receipt && reviewItem.submissionReceipt?.sender_name && (
+                          <p className="text-[11px] text-slate-500 truncate max-w-[260px]">
+                            {reviewItem.submissionReceipt.sender_name}
+                            {reviewItem.submissionReceipt.expedition_at && ` · ${reviewItem.submissionReceipt.expedition_at}`}
+                          </p>
+                        )}
+                      </div>
+                      {collapsedCards.receipt ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />}
                     </button>
-                    <AnimatePresence initial={false}>
-                      {!collapsedCards.receipt && (
-                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
-                          <div className="p-4 grid grid-cols-1 gap-2 text-xs">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">Remetente</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{reviewItem.submissionReceipt?.sender_name || '-'}</span>
+                    <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${!collapsedCards.receipt ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                      <div className="overflow-hidden">
+                        <div className="border-t border-blue-100 dark:border-slate-700 p-4 grid grid-cols-1 gap-2 text-xs">
+                          {[
+                            { label: 'Remetente',     value: reviewItem.submissionReceipt?.sender_name,        mono: false },
+                            { label: 'CPF',           value: reviewItem.submissionReceipt?.sender_cpf,         mono: true },
+                            { label: 'Expedição',     value: reviewItem.submissionReceipt?.expedition_at,      mono: false },
+                            { label: 'Autenticidade', value: reviewItem.submissionReceipt?.authenticity_code,  mono: true },
+                          ].map(({ label, value, mono }) => (
+                            <div key={label} className="flex items-start justify-between gap-3">
+                              <span className="flex items-center gap-1 text-slate-500 shrink-0">
+                                {value
+                                  ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  : <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                                {label}
+                              </span>
+                              <span className={`${mono ? 'font-mono' : 'font-semibold'} text-slate-700 dark:text-slate-200 text-right break-all ${!value ? 'text-amber-500 dark:text-amber-400 italic' : ''}`}>
+                                {value || 'ausente'}
+                              </span>
                             </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">CPF</span>
-                              <span className="font-mono text-slate-700 dark:text-slate-200">{reviewItem.submissionReceipt?.sender_cpf || '-'}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">Expedicao</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{reviewItem.submissionReceipt?.expedition_at || '-'}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">Codigo</span>
-                              <span className="font-mono text-slate-700 dark:text-slate-200 text-right break-all">{reviewItem.submissionReceipt?.authenticity_code || '-'}</span>
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Dados Pessoa Juridica */}
@@ -836,70 +921,82 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                       onClick={() => toggleCard('companyRegistry')}
                       className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
                     >
-                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Dados Pessoa Juridica</p>
-                      {collapsedCards.companyRegistry ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                      <div className="flex flex-col items-start gap-0.5 min-w-0">
+                        <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Dados Pessoa Jurídica</p>
+                        {collapsedCards.companyRegistry && (reviewItem.companyRegistry?.fields?.razao_social || reviewItem.companyRegistry?.fields?.sigla) && (
+                          <p className="text-[11px] text-slate-500 truncate max-w-[260px]">
+                            {reviewItem.companyRegistry?.fields?.razao_social || reviewItem.companyRegistry?.fields?.sigla}
+                            {reviewItem.companyRegistry?.fields?.natureza_juridica && ` · ${reviewItem.companyRegistry.fields.natureza_juridica}`}
+                          </p>
+                        )}
+                      </div>
+                      {collapsedCards.companyRegistry ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />}
                     </button>
-                    <AnimatePresence initial={false}>
-                      {!collapsedCards.companyRegistry && (
-                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
-                          <div className="p-4">
-                            {Object.keys(reviewItem.companyRegistry?.fields || {}).length > 0 ? (
-                              <div className="grid grid-cols-1 gap-2 text-xs">
-                                {Object.entries(reviewItem.companyRegistry?.fields || {}).map(([k, v]) => (
-                                  <div key={k} className="flex items-start justify-between gap-3">
-                                    <span className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '-')}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${!collapsedCards.companyRegistry ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                      <div className="overflow-hidden">
+                        <div className="border-t border-blue-100 dark:border-slate-700 p-4">
+                          {Object.keys(reviewItem.companyRegistry?.fields || {}).length > 0 ? (
+                            <div className="grid grid-cols-1 gap-2 text-xs">
+                              {Object.entries(reviewItem.companyRegistry?.fields || {}).map(([k, v]) => (
+                                <div key={k} className="flex items-start justify-between gap-3">
+                                  <span className="text-slate-500">{COMPANY_REGISTRY_LABELS[k] || k}</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '-')}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Identificacao/Caracteristicas da Empresa */}
+                  {/* Identificação da Empresa */}
                   <div className="bg-blue-50/50 dark:bg-slate-800/50 rounded-2xl border border-blue-100 dark:border-slate-700 overflow-hidden">
                     <button
                       onClick={() => toggleCard('companyIdentification')}
                       className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50/40 dark:hover:bg-slate-700/30 transition-colors"
                     >
-                      <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Identificacao da Empresa</p>
-                      {collapsedCards.companyIdentification ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                      <div className="flex flex-col items-start gap-0.5 min-w-0">
+                        <p className="text-sm font-bold text-blue-900 dark:text-slate-100">Identificação da Empresa</p>
+                        {collapsedCards.companyIdentification && reviewItem.companyIdentification?.fields?.company_type && (
+                          <p className="text-[11px] text-slate-500 truncate max-w-[260px]">
+                            {reviewItem.companyIdentification.fields.company_type}
+                            {reviewItem.companyIdentification?.fields?.company_status && ` · ${reviewItem.companyIdentification.fields.company_status}`}
+                          </p>
+                        )}
+                      </div>
+                      {collapsedCards.companyIdentification ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />}
                     </button>
-                    <AnimatePresence initial={false}>
-                      {!collapsedCards.companyIdentification && (
-                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
-                          <div className="p-4">
-                            {Object.keys(reviewItem.companyIdentification?.fields || {}).length > 0 ? (
-                              <div className="grid grid-cols-1 gap-2 text-xs">
-                                {Object.entries(reviewItem.companyIdentification?.fields || {}).map(([k, v]) => (
-                                  <div key={k} className="flex items-start justify-between gap-3">
-                                    <span className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '-')}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
-                            )}
-                            {(reviewItem.companyIdentification?.qa?.length || 0) > 0 && (
-                              <div className="mt-3 pt-3 border-t border-blue-100 dark:border-slate-700 flex flex-col gap-2">
-                                {(reviewItem.companyIdentification?.qa || []).slice(0, 8).map((qa, idx) => (
-                                  <div key={idx} className="text-xs">
-                                    <p className="font-semibold text-slate-600 dark:text-slate-300">{qa.question}</p>
-                                    <p className="text-slate-500">{qa.value || '-'}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${!collapsedCards.companyIdentification ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                      <div className="overflow-hidden">
+                        <div className="border-t border-blue-100 dark:border-slate-700 p-4">
+                          {Object.keys(reviewItem.companyIdentification?.fields || {}).length > 0 ? (
+                            <div className="grid grid-cols-1 gap-2 text-xs">
+                              {Object.entries(reviewItem.companyIdentification?.fields || {}).map(([k, v]) => (
+                                <div key={k} className="flex items-start justify-between gap-3">
+                                  <span className="text-slate-500">{COMPANY_IDENT_LABELS[k] || k}</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">{String(v || '-')}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">Sem campos estruturados para este bloco.</p>
+                          )}
+                          {(reviewItem.companyIdentification?.qa?.length || 0) > 0 && (
+                            <div className="mt-3 pt-3 border-t border-blue-100 dark:border-slate-700 flex flex-col gap-2">
+                              {(reviewItem.companyIdentification?.qa || []).slice(0, 8).map((qa, idx) => (
+                                <div key={idx} className="text-xs">
+                                  <p className="font-semibold text-slate-600 dark:text-slate-300">{qa.question}</p>
+                                  <p className="text-slate-500">{qa.value || '-'}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Projects */}
@@ -914,10 +1011,9 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                         </p>
                         {collapsedCards.projects ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
                       </button>
-                      <AnimatePresence initial={false}>
-                        {!collapsedCards.projects && (
-                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-blue-100 dark:border-slate-700">
-                            <div className="p-3 flex flex-col gap-2">
+                      <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${!collapsedCards.projects ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                        <div className="overflow-hidden">
+                          <div className="border-t border-blue-100 dark:border-slate-700 p-3 flex flex-col gap-2">
                               {reviewItem.projects.map((p: any, i: number) => {
                                 const hrTotal = p.human_resources?.reduce((s: number, hr: any) => s + (hr.annual_amount || 0), 0) ?? 0;
                                 const expTotal = p.expenses?.reduce((s: number, e: any) => s + (e.amount || 0), 0) ?? 0;
@@ -930,7 +1026,7 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                                         <div className="w-7 h-7 bg-blue-100 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xs font-black text-blue-600 shrink-0">{i + 1}</div>
                                         <div>
                                           <p className="font-bold text-blue-900 dark:text-slate-100 text-sm">{p.title}</p>
-                                          <p className="text-xs text-slate-500">{CATEGORY_LABELS[p.category] || p.category || 'Categoria nao informada'}</p>
+                                          <p className="text-xs text-slate-500">{CATEGORY_LABELS[p.category] || p.category || 'Categoria não informada'}</p>
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-3 shrink-0">
@@ -940,24 +1036,32 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                                         {expandedProject === i ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                                       </div>
                                     </button>
-                                    <AnimatePresence>
-                                      {expandedProject === i && (
-                                        <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
-                                          className="overflow-hidden border-t border-blue-50 dark:border-slate-700">
-                                          <div className="p-4 flex flex-col gap-3">
+                                    <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${expandedProject === i ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                                      <div className="overflow-hidden">
+                                        <div className="border-t border-blue-50 dark:border-slate-700 p-4 flex flex-col gap-3">
                                             {p.description && (
                                               <div className="text-xs">
-                                                <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">Descricao</p>
+                                                <p className="font-bold text-slate-600 dark:text-slate-300 mb-1">Descrição</p>
                                                 <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{p.description}</p>
                                               </div>
                                             )}
-                                            <div className="flex items-center gap-2 text-xs">
+                                            <div className="flex flex-wrap items-center gap-2 text-xs">
                                               <span className="px-2 py-1 rounded-lg bg-blue-100 dark:bg-slate-700 text-blue-700 dark:text-blue-300 font-semibold">
-                                                {CATEGORY_LABELS[p.category] || p.category || 'Categoria nao informada'}
+                                                {CATEGORY_LABELS[p.category] || p.category || 'Categoria não informada'}
                                               </span>
                                               {typeof p.is_continuous === 'boolean' && (
                                                 <span className="px-2 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-semibold">
-                                                  {p.is_continuous ? 'Projeto continuo' : 'Projeto nao continuo'}
+                                                  {p.is_continuous ? 'Contínuo' : 'Não contínuo'}
+                                                </span>
+                                              )}
+                                              {p.trl_initial != null && (
+                                                <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold font-mono">
+                                                  TRL {p.trl_initial}{p.trl_final != null ? `→${p.trl_final}` : ''}
+                                                </span>
+                                              )}
+                                              {p.nature && (
+                                                <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold">
+                                                  {p.nature}
                                                 </span>
                                               )}
                                             </div>
@@ -986,13 +1090,23 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                                                 <div>
                                                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Layers className="w-3 h-3" /> Despesas</p>
                                                   <div className="flex flex-col gap-1.5">
-                                                    {p.expenses.slice(0, 4).map((exp: any, ei: number) => (
-                                                      <div key={ei} className="flex items-center justify-between p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg text-xs">
-                                                        <p className="text-slate-600 dark:text-slate-400 truncate max-w-[80px]">{exp.category || exp.description}</p>
-                                                        <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
+                                                    {p.expenses.map((exp: any, ei: number) => (
+                                                      <div key={ei} className="p-2 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg text-xs">
+                                                        <div className="flex items-start justify-between gap-1">
+                                                          <div className="min-w-0">
+                                                            {exp.supplier_name ? (
+                                                              <p className="font-semibold text-slate-700 dark:text-slate-300 truncate">{exp.supplier_name}</p>
+                                                            ) : (
+                                                              <p className="text-slate-600 dark:text-slate-400 truncate">{exp.category || exp.description}</p>
+                                                            )}
+                                                            {exp.supplier_cnpj_raw && (
+                                                              <p className="font-mono text-slate-400 text-[10px]">{exp.supplier_cnpj_raw}</p>
+                                                            )}
+                                                          </div>
+                                                          <p className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">{fmt(exp.amount)}</p>
+                                                        </div>
                                                       </div>
                                                     ))}
-                                                    {p.expenses.length > 4 && <p className="text-xs text-slate-400 text-center">+{p.expenses.length - 4}</p>}
                                                   </div>
                                                 </div>
                                               )}
@@ -1017,17 +1131,15 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
                                             {!p.description && !(p.human_resources?.length > 0) && !(p.expenses?.length > 0) && !(p.equipment?.length > 0) && (
                                               <p className="text-xs text-slate-500">Sem detalhes adicionais para este projeto.</p>
                                             )}
-                                          </div>
-                                        </motion.div>
-                                      )}
-                                    </AnimatePresence>
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
                                 );
                               })}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1115,6 +1227,16 @@ export default function FormsList({ onSelectCompany }: { onSelectCompany?: (id: 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Structure Check full-screen overlay */}
+      {structureCheck && (
+        <StructureCheckPanel
+          batchId={structureCheck.batchId}
+          formData={structureCheck.formData}
+          fileName={structureCheck.fileName}
+          onClose={() => setStructureCheck(null)}
+        />
+      )}
 
     </div>
   );

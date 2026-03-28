@@ -97,6 +97,20 @@ export class ImportsController {
     stream.pipe(res);
   }
 
+  @Get('formpd/batches/:id/inspect/meta')
+  inspectMeta(@Param('id') id: string) {
+    return this.importsService.inspectMeta(id);
+  }
+
+  @Get('formpd/batches/:id/inspect/page/:page')
+  inspectPage(
+    @Param('id') id: string,
+    @Param('page') page: string,
+    @Query('scale') scale?: string,
+  ) {
+    return this.importsService.inspectPage(id, Number(page), scale ? Number(scale) : 1.5);
+  }
+
   @Post('empresas-cnpj')
   @UseInterceptors(
     FileInterceptor('file', {

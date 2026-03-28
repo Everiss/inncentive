@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, FileText, Zap } from 'lucide-react';
+import { Upload, FileText, Zap, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/api';
 
@@ -20,7 +20,7 @@ export default function FormpdAiUpload({ onComplete, companyId }: Props) {
     setDragging(false);
     const dropped = e.dataTransfer.files[0];
     if (dropped?.type === 'application/pdf') setFile(dropped);
-    else toast.error('Apenas arquivos PDF sao aceitos');
+    else toast.error('Apenas arquivos PDF são aceitos');
   }, []);
 
   const handleUpload = async () => {
@@ -111,15 +111,16 @@ export default function FormpdAiUpload({ onComplete, companyId }: Props) {
           disabled={!file || uploading}
           className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-purple-700 text-white rounded-2xl font-bold shadow-lg shadow-violet-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          <Zap className="w-4 h-4" />
-          {uploading ? 'Enviando...' : 'Iniciar Extracao'}
+          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+          {uploading ? 'Enviando...' : 'Iniciar Extração'}
         </button>
 
         <button
           onClick={() => onComplete?.()}
-          className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-600/20 transition-all"
+          disabled={uploading}
+          className="w-full py-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-sm font-semibold transition-colors disabled:opacity-40"
         >
-          Fechar
+          Cancelar
         </button>
       </motion.div>
     </div>

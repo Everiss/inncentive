@@ -12,6 +12,7 @@ from app.parsers.projects_parser import parse_projects
 from app.parsers.hr_parser import parse_hr
 from app.parsers.expenses_parser import parse_expenses
 from app.parsers.equipment_parser import parse_equipment
+from app.parsers.third_party_services_parser import parse_third_party_services
 from app.parsers.company_identification_parser import parse_company_identification
 from app.parsers.receipt_parser import parse_submission_receipt
 from app.parsers.version_detector import detect_formpd_version
@@ -52,6 +53,7 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
     _hr = parse_hr(text, family=_family)
     _expenses = parse_expenses(text, family=_family)
     _equipment = parse_equipment(text)
+    _third_party = parse_third_party_services(text) if _family == "v3_modern_2023_plus" else []
 
     if projects and _hr:
         hr_by_project: dict[int, list[dict]] = {}
@@ -91,6 +93,26 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
         for i, p in enumerate(projects, start=1):
             if exp_by_project.get(i):
                 p["expenses"] = exp_by_project[i]
+
+    if projects and _third_party:
+        tp_by_project: dict[int, list[dict]] = {}
+        for row in _third_party:
+            idx = int(row.get("project_index") or 1)
+            tp_item = {
+                "category": row.get("category"),
+                "description": row.get("description"),
+                "amount": row.get("amount"),
+            }
+            for _extra in ("supplier_cnpj_raw", "supplier_name", "service_status", "service_type"):
+                if row.get(_extra) is not None:
+                    tp_item[_extra] = row[_extra]
+            tp_by_project.setdefault(idx, []).append(tp_item)
+
+        for i, p in enumerate(projects, start=1):
+            if tp_by_project.get(i):
+                # Append third-party entries; don't overwrite existing expense rows
+                existing = p.get("expenses") or []
+                p["expenses"] = existing + tp_by_project[i]
 
     if projects and _equipment:
         eq_by_project: dict[int, list[dict]] = {}

@@ -1003,6 +1003,18 @@ export class ImportsService {
     throw new NotFoundException('PDF do lote nao encontrado no storage');
   }
 
+  async inspectMeta(batchId: string) {
+    const filePath = await this.getFormpdPdfPath(batchId);
+    const buffer = fs.readFileSync(filePath);
+    return this.pdfExtractorClient.inspectMeta(buffer, path.basename(filePath));
+  }
+
+  async inspectPage(batchId: string, page: number, scale = 1.5) {
+    const filePath = await this.getFormpdPdfPath(batchId);
+    const buffer = fs.readFileSync(filePath);
+    return this.pdfExtractorClient.inspectPage(buffer, path.basename(filePath), page, scale);
+  }
+
   async getBatches(params: Record<string, any>) {
     const page = Math.max(Number(params?.page || 1), 1);
     const limit = Math.min(Math.max(Number(params?.limit || 20), 1), 200);
