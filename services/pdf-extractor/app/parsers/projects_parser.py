@@ -191,10 +191,11 @@ def _new_project(idx: int) -> dict:
         "category": None,
         "pb_pa_or_de": None,
         "item_number": idx,
+        "nature": None,                        # Produto / Processo / Serviço (all versions)
         "is_continuous": None,
         "tech_area_label": None,
-        "knowledge_area": None,
-        "specific_area": None,
+        "knowledge_area": None,                # general area (ÁREA DO PROJETO)
+        "specific_area": None,                 # specific sub-area (ESPECIFICAR ÁREA)
         "keywords_1": None,
         "keywords_2": None,
         "keywords_3": None,
@@ -204,10 +205,19 @@ def _new_project(idx: int) -> dict:
         "innovative_challenge": None,
         "methodology": None,
         "additional_info": None,
-        "economic_result_obtained": None,
+        "economic_result_objective": None,     # objective stated in the form
+        "economic_result_obtained": None,      # result achieved in the base year
+        "innovation_result_objective": None,
         "innovation_result_obtained": None,
         "trl_initial": None,
         "trl_final": None,
+        "mrl_initial": None,                   # v3_late (2024+)
+        "mrl_final": None,
+        "strl_initial": None,
+        "strl_final": None,
+        "trl_justification": None,             # v3_late (2024+)
+        "financing_own_pct": None,             # v3: RECURSOS PRÓPRIOS %
+        "financing_external_pct": None,        # v3: FINANCIAMENTOS %
         "aligns_public_policy": None,
         "public_policy_ref": None,
         "human_resources": [],
@@ -228,62 +238,260 @@ def _parse_legacy_v1_v2(lines: list[str]) -> list[dict]:
     section_re = re.compile(r"^3\.1\.\d+\.", re.IGNORECASE)
     fallback_item = 1
 
+    def _get_or_create(item: int) -> dict:
+        if item not in projects:
+            projects[item] = _new_project(item)
+        return projects[item]
+
     for i, raw in enumerate(lines):
         line = _clean(raw)
         if not line:
             continue
         nline = _norm(line)
 
-        if title_re.match(line) and "NOME DA ATIVIDADE DE PD&I" in nline:
+        # ── Title ──────────────────────────────────────────────────────────
+        if title_re.match(line) and (
+            "NOME DA ATIVIDADE DE PD&I" in nline or "TITULO DO PROJETO" in nline
+        ):
             item = _extract_item_idx(line) or fallback_item
+            p = _get_or_create(item)
             next_val = _next_non_empty(lines, i + 1)
-            if item not in projects:
-                projects[item] = _new_project(item)
-            if next_val:
-                val = next_val[0]
-                if not _is_numbered_heading(val):
-                    projects[item]["title"] = val[:500]
+            if next_val and not _is_numbered_heading(next_val[0]):
+                p["title"] = next_val[0][:500]
             fallback_item = max(fallback_item, item)
             continue
 
-        if section_re.match(line) and "PB, PA OU DE" in nline:
-            item = _extract_item_idx(line) or fallback_item
-            if item not in projects:
-                projects[item] = _new_project(item)
+        if not section_re.match(line):
+            continue
+
+        item = _extract_item_idx(line) or fallback_item
+        p = _get_or_create(item)
+
+        # ── Category ───────────────────────────────────────────────────────
+        if "PB, PA OU DE" in nline or "CATEGORIA PREDOMINANTE" in nline:
             next_val = _next_non_empty(lines, i + 1)
             if next_val:
-                projects[item]["category"] = _map_category(next_val[0])
+                p["category"] = _map_category(next_val[0])
+                p["pb_pa_or_de"] = _map_pb_pa_or_de(next_val[0])
             continue
 
-        if section_re.match(line) and (
-            "DESCRICAO DO PROJETO" in nline or "DESTAQUE O ELEMENTO" in nline
-        ):
-            item = _extract_item_idx(line) or fallback_item
-            if item not in projects:
-                projects[item] = _new_project(item)
-            desc, _ = _extract_multiline_value(lines, i + 1, max_len=1500)
-            if desc:
-                projects[item]["description"] = desc
-            continue
-
-        if section_re.match(line) and (
-            "ATIVIDADE E CONTINUA" in nline or "PROJETO E CONTINUO" in nline
-        ):
-            item = _extract_item_idx(line) or fallback_item
-            if item not in projects:
-                projects[item] = _new_project(item)
+        # ── Nature ─────────────────────────────────────────────────────────
+        if "NATUREZA" in nline and "DA ATIVIDADE" not in nline:
             marked = _extract_marked_option(lines, i + 1)
             if marked:
-                projects[item]["is_continuous"] = _parse_yes_no(marked)
+                p["nature"] = _parse_nature(marked)
             else:
                 next_val = _next_non_empty(lines, i + 1)
                 if next_val:
-                    projects[item]["is_continuous"] = _parse_yes_no(next_val[0])
+                    p["nature"] = _parse_nature(next_val[0])
+            continue
+
+        # ── Description ────────────────────────────────────────────────────
+        if "DESCRICAO DO PROJETO" in nline:
+            desc, _ = _extract_multiline_value(lines, i + 1, max_len=1500)
+            if desc:
+                p["description"] = desc
+            continue
+
+        # ── Innovative element ─────────────────────────────────────────────
+        if "ELEMENTO TECNOLOGICAMENTE" in nline or "DESTAQUE O ELEMENTO" in nline:
+            val, _ = _extract_multiline_value(lines, i + 1, max_len=4000)
+            if val:
+                p["innovative_element"] = val
+            continue
+
+        # ── Innovative challenge ────────────────────────────────────────────
+        if "BARREIRA" in nline or "DESAFIO TECNOLOGICO" in nline:
+            val, _ = _extract_multiline_value(lines, i + 1, max_len=4000)
+            if val:
+                p["innovative_challenge"] = val
+            continue
+
+        # ── Methodology ────────────────────────────────────────────────────
+        if "METODOLOGIA" in nline or "METODOS UTILIZADOS" in nline:
+            val, _ = _extract_multiline_value(lines, i + 1, max_len=4000)
+            if val:
+                p["methodology"] = val
+            continue
+
+        # ── Keywords ───────────────────────────────────────────────────────
+        if "PALAVRAS-CHAVE" in nline:
+            next_val = _next_non_empty(lines, i + 1)
+            if next_val:
+                parts = [x.strip() for x in re.split(r"[;,|]", next_val[0]) if x.strip()]
+                if not parts:
+                    parts = [next_val[0].strip()]
+                for k in range(5):
+                    p[f"keywords_{k+1}"] = parts[k] if k < len(parts) else None
+            continue
+
+        # ── Technical area ─────────────────────────────────────────────────
+        if ("AREA PREDOMINANTE" in nline or "AREA DO CONHECIMENTO" in nline) and "PROJETO" not in nline:
+            next_val = _next_non_empty(lines, i + 1)
+            if next_val and not _is_numbered_heading(next_val[0]):
+                p["tech_area_label"] = next_val[0][:200]
+                p["knowledge_area"] = next_val[0][:255]
+            continue
+
+        if "ESPECIFICAR" in nline and "AREA" in nline:
+            next_val = _next_non_empty(lines, i + 1)
+            if next_val and not _is_numbered_heading(next_val[0]):
+                p["specific_area"] = next_val[0][:500]
+            continue
+
+        # ── Continuous activity ────────────────────────────────────────────
+        if "ATIVIDADE E CONTINUA" in nline or "PROJETO E CONTINUO" in nline:
+            marked = _extract_marked_option(lines, i + 1)
+            if marked:
+                p["is_continuous"] = _parse_yes_no(marked)
+            else:
+                next_val = _next_non_empty(lines, i + 1)
+                if next_val:
+                    p["is_continuous"] = _parse_yes_no(next_val[0])
+            continue
+
+        # ── Economic result ────────────────────────────────────────────────
+        if "RESULTADO ECONOMICO" in nline:
+            val, _ = _extract_multiline_value(lines, i + 1, max_len=4000)
+            if val:
+                p["economic_result_obtained"] = val
+            continue
+
+        # ── Innovation result ──────────────────────────────────────────────
+        if "RESULTADO DE INOVACAO" in nline:
+            val, _ = _extract_multiline_value(lines, i + 1, max_len=4000)
+            if val:
+                p["innovation_result_obtained"] = val
+            continue
+
+        # ── Additional info ────────────────────────────────────────────────
+        if "INFORMACOES COMPLEMENTARES" in nline or "DETALHAMENTOS ADICIONAIS" in nline:
+            val, _ = _extract_multiline_value(lines, i + 1, max_len=4000)
+            if val:
+                p["additional_info"] = val
             continue
 
     if not projects:
         return []
     return [projects[k] for k in sorted(projects.keys())]
+
+
+def _parse_nature(raw: str | None) -> str | None:
+    """Normalise natureza field to PRODUTO / PROCESSO / SERVICO."""
+    n = _norm(raw or "")
+    if not n:
+        return None
+    if "PRODUTO" in n:
+        return "PRODUTO"
+    if "PROCESSO" in n:
+        return "PROCESSO"
+    if "SERVI" in n:
+        return "SERVICO"
+    return raw.strip()[:50] if raw else None
+
+
+def _extract_trl_scales(block: list[str], block_norm: list[str]) -> dict:
+    """
+    Extract TRL / MRL / STRL initial and final values from a v3 project block.
+    Handles two layouts:
+      • Single line: "INICIAL: TRL 4 / MRL 3 / STRL 2"
+      • Multi-line:  "INICIAL:"  then next lines contain "TRL N", "MRL N", "STRL N"
+    """
+    result: dict = {
+        "trl_initial": None, "trl_final": None,
+        "mrl_initial": None, "mrl_final": None,
+        "strl_initial": None, "strl_final": None,
+    }
+
+    def _extract_scale(text: str, prefix: str) -> int | None:
+        m = re.search(rf"{prefix}\s*(\d+)", text, re.IGNORECASE)
+        return int(m.group(1)) if m else None
+
+    for i, ln in enumerate(block_norm):
+        if ln == "INICIAL:":
+            # Collect next 4 lines (may have TRL / MRL / STRL each on own line)
+            window = " ".join(block[i : i + 5])
+            result["trl_initial"] = _extract_scale(window, "TRL")
+            result["mrl_initial"] = _extract_scale(window, "MRL")
+            result["strl_initial"] = _extract_scale(window, "STRL")
+        elif ln == "FINAL:":
+            window = " ".join(block[i : i + 5])
+            result["trl_final"] = _extract_scale(window, "TRL")
+            result["mrl_final"] = _extract_scale(window, "MRL")
+            result["strl_final"] = _extract_scale(window, "STRL")
+        # Inline variant: "INICIAL: TRL 4 / MRL 3" or "FINAL: TRL 7"
+        elif "INICIAL" in ln and ("TRL" in ln or "MRL" in ln or "STRL" in ln):
+            result["trl_initial"] = _extract_scale(ln, "TRL")
+            result["mrl_initial"] = _extract_scale(ln, "MRL")
+            result["strl_initial"] = _extract_scale(ln, "STRL")
+        elif "FINAL" in ln and ("TRL" in ln or "MRL" in ln or "STRL" in ln):
+            result["trl_final"] = _extract_scale(ln, "TRL")
+            result["mrl_final"] = _extract_scale(ln, "MRL")
+            result["strl_final"] = _extract_scale(ln, "STRL")
+
+    return result
+
+
+def _extract_financing(block: list[str], block_norm: list[str]) -> tuple[float | None, float | None]:
+    """
+    Extract RECURSOS PRÓPRIOS % and FINANCIAMENTOS % from a v3 project block.
+    Returns (own_pct, external_pct).
+    """
+    for i, ln in enumerate(block_norm):
+        if "RECURSOS PROPRIOS" in ln or "FONTES DE FINANCIAMENTO" in ln:
+            # Search current line + next 3 for percentage values
+            window = " ".join(block[i : i + 4])
+            own_m = re.search(r"RECURSOS\s*PR[OÓ]PRIOS\s*%\s*[:\-]?\s*([0-9]{1,3}(?:[.,]\d+)?)", window, re.IGNORECASE)
+            ext_m = re.search(r"FINANCIAMENTOS?\s*%\s*[:\-]?\s*([0-9]{1,3}(?:[.,]\d+)?)", window, re.IGNORECASE)
+            own_pct = float(own_m.group(1).replace(",", ".")) if own_m else None
+            ext_pct = float(ext_m.group(1).replace(",", ".")) if ext_m else None
+            if own_pct is not None or ext_pct is not None:
+                return own_pct, ext_pct
+    return None, None
+
+
+def _extract_result_pair(
+    block: list[str], block_norm: list[str], label_fragment: str
+) -> tuple[str | None, str | None]:
+    """
+    Extract (objective, obtained) from a RESULTADO block.
+    The block typically contains:
+      RESULTADO ECONÔMICO / RESULTADO DE INOVAÇÃO
+        OBJETIVO DO PROJETO: [text]
+        NO ANO-BASE: [text]
+    Returns (objective_text, obtained_text).
+    """
+    start = next((i for i, ln in enumerate(block_norm) if label_fragment in ln), None)
+    if start is None:
+        return None, None
+
+    objective: str | None = None
+    obtained: str | None = None
+
+    # Scan forward up to 20 lines
+    for i in range(start + 1, min(len(block_norm), start + 20)):
+        ln = block_norm[i]
+        if any(stop in ln for stop in ("ITENS DE DISPENDIO", "RECURSOS HUMANOS ENVOLVIDOS", "PROGRAMA/ATIVIDADES")):
+            break
+        if _is_v3_label_line(block[i]) and i != start + 1:
+            break
+
+        if "OBJETIVO DO PROJETO" in ln:
+            obj_val = _extract_value_after_label(block, i, max_lines=6)
+            if obj_val:
+                objective = obj_val[:4000]
+        elif "NO ANO-BASE" in ln or "ANO BASE" in ln:
+            obt_val = _extract_value_after_label(block, i, max_lines=6)
+            if obt_val:
+                obtained = obt_val[:4000]
+
+    # Fallback: if no sub-labels found, first value after the main label = obtained
+    if objective is None and obtained is None:
+        val = _extract_value_after_label(block, start, max_lines=8)
+        if val:
+            obtained = val[:4000]
+
+    return objective, obtained
 
 
 def _parse_modern_v3(lines: list[str]) -> list[dict]:
@@ -360,13 +568,13 @@ def _parse_modern_v3(lines: list[str]) -> list[dict]:
             area_val = _extract_value_after_label(block, area_idx, max_lines=6)
             if area_val:
                 p["tech_area_label"] = area_val[:200]
+                p["knowledge_area"] = area_val[:255]   # general area = knowledge_area
 
         know_idx = find_idx_contains("ESPECIFICAR AREA DE CONHECIMENTO")
         if know_idx is not None:
             know_val = _extract_value_after_label(block, know_idx, max_lines=6)
             if know_val:
-                p["knowledge_area"] = know_val[:255]
-                p["specific_area"] = know_val[:500]
+                p["specific_area"] = know_val[:500]    # specific sub-area only
 
         kw_idx = find_idx_contains("PALAVRAS-CHAVE")
         if kw_idx is not None:
@@ -402,18 +610,22 @@ def _parse_modern_v3(lines: list[str]) -> list[dict]:
             if val:
                 p["additional_info"] = val[:4000]
 
-        econ_idx = find_idx_contains("RESULTADO ECONOMICO")
-        if econ_idx is not None:
-            val = _extract_value_after_label(block, econ_idx, max_lines=8)
-            if val:
-                p["economic_result_obtained"] = val[:4000]
+        # nature (Produto / Processo / Serviço) — present in all v3 forms
+        nature_idx = find_idx_contains("NATUREZA")
+        if nature_idx is not None:
+            val = _extract_value_after_label(block, nature_idx, max_lines=4)
+            p["nature"] = _parse_nature(val)
 
-        inov_res_idx = find_idx_contains("RESULTADO DE INOVACAO")
-        if inov_res_idx is not None:
-            val = _extract_value_after_label(block, inov_res_idx, max_lines=8)
-            if val:
-                p["innovation_result_obtained"] = val[:4000]
+        # economic and innovation results — objective vs obtained
+        econ_obj, econ_obt = _extract_result_pair(block, block_norm, "RESULTADO ECONOMICO")
+        p["economic_result_objective"] = econ_obj
+        p["economic_result_obtained"] = econ_obt
 
+        inov_obj, inov_obt = _extract_result_pair(block, block_norm, "RESULTADO DE INOVACAO")
+        p["innovation_result_objective"] = inov_obj
+        p["innovation_result_obtained"] = inov_obt
+
+        # public policy alignment
         policy_idx = find_idx_contains("ALINHAM COM AS POLITICAS PUBLICAS NACIONAIS")
         if policy_idx is not None:
             val = _extract_value_after_label(block, policy_idx, max_lines=4)
@@ -425,19 +637,24 @@ def _parse_modern_v3(lines: list[str]) -> list[dict]:
             else:
                 p["public_policy_ref"] = None
 
-        trl_initial = None
-        trl_final = None
-        for i2, ln in enumerate(block_norm):
-            if ln == "INICIAL:" and i2 + 1 < len(block):
-                m = re.search(r"TRL\s*(\d+)", block[i2 + 1], re.IGNORECASE)
-                if m:
-                    trl_initial = int(m.group(1))
-            if ln == "FINAL:" and i2 + 1 < len(block):
-                m = re.search(r"TRL\s*(\d+)", block[i2 + 1], re.IGNORECASE)
-                if m:
-                    trl_final = int(m.group(1))
-        p["trl_initial"] = trl_initial
-        p["trl_final"] = trl_final
+        # TRL / MRL / STRL scales
+        scales = _extract_trl_scales(block, block_norm)
+        p.update(scales)
+
+        # TRL justification (v3_late AB2024+)
+        trl_just_idx = next(
+            (i for i, ln in enumerate(block_norm) if "JUSTIFIQUE" in ln and "MATURIDADE" in ln),
+            None,
+        )
+        if trl_just_idx is not None:
+            val = _extract_value_after_label(block, trl_just_idx, max_lines=12)
+            if val:
+                p["trl_justification"] = val[:4000]
+
+        # Financing sources (RECURSOS PRÓPRIOS % / FINANCIAMENTOS %)
+        own_pct, ext_pct = _extract_financing(block, block_norm)
+        p["financing_own_pct"] = own_pct
+        p["financing_external_pct"] = ext_pct
 
         projects.append(p)
 

@@ -1,7 +1,7 @@
 ﻿# SERVICES.md - Catalogo de Servicos
 
 Guia de documentacao: [README_DOCS.md](./README_DOCS.md)
-Ultima atualizacao: 2026-03-26
+Ultima atualizacao: 2026-03-27
 
 ## 1. Visao geral
 
@@ -294,3 +294,19 @@ docker compose ps
 - Acionar IA de forma targeted por batch/campo.
 - Nunca processar sem rastreabilidade em `file_hub`.
 - Monitorar filas ativas antes de novos uploads massivos.
+
+## 10. Rotinas de correcao (FORMPD)
+
+Scripts no `backend` para corrigir dados ja persistidos:
+
+- `npm run backfill:formpd-projects -- --batch-id=<id> --apply`
+  - recria projetos/subtabelas FORMPD a partir do `record_data` do batch aprovado.
+- `npm run fix:formpd-expenses -- --batch-id=<id>`
+  - modo `dry-run` (padrao), apenas mostra candidatos de remocao.
+- `npm run fix:formpd-expenses -- --batch-id=<id> --apply`
+  - remove duplicidades em `formpd_project_expenses` (duplicata exata e pai/filho com mesmo valor).
+
+Escopo alternativo para o script de despesas:
+
+- `--form-id=<id>`
+- `--project-id=<id>`

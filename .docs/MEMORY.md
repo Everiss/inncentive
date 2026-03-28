@@ -1,7 +1,7 @@
 ﻿# InnCentive - Memoria Tecnica
 
 Guia de documentacao: [README_DOCS.md](./README_DOCS.md)
-Ultima atualizacao: 2026-03-26
+Ultima atualizacao: 2026-03-27
 
 ## 1. Decisoes tecnicas vigentes
 
@@ -120,6 +120,9 @@ Causa:
 Correcao:
 - Parser de despesas atualizado para manter somente itens folha.
 - Dedupe defensivo adicionado na persistencia de `formpd_project_expenses` na aprovacao.
+- Script operacional criado para saneamento de base historica:
+  - `npm run fix:formpd-expenses -- --batch-id=<id>` (dry-run)
+  - `npm run fix:formpd-expenses -- --batch-id=<id> --apply`
 
 ## 3. Debitos tecnicos abertos
 

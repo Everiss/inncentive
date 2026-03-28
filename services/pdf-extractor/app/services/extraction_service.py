@@ -16,6 +16,8 @@ from app.parsers.company_identification_parser import parse_company_identificati
 from app.parsers.receipt_parser import parse_submission_receipt
 from app.parsers.version_detector import detect_formpd_version
 from app.parsers.validators import validate_result
+from app.parsers.summary_table_parser import parse_summary_table
+from app.parsers.scorer import compute_score
 
 logger = get_logger("extraction_service")
 
@@ -35,6 +37,7 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
             text_source = "pdfplumber"
 
     version_info = detect_formpd_version(text)
+    _profile = version_info.get("profile")
 
     company = parse_company(text)
     company_registry = parse_company_registry(text)
@@ -42,10 +45,12 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
     projects = parse_projects(text, profile=version_info.get("family"))
     submission_receipt = parse_submission_receipt(text)
     company_identification = parse_company_identification(text)
+    summary_table = parse_summary_table(text)
 
     # Optional section-level extracts and merge into projects (by item index).
-    _hr = parse_hr(text)
-    _expenses = parse_expenses(text)
+    _family = version_info.get("family")
+    _hr = parse_hr(text, family=_family)
+    _expenses = parse_expenses(text, family=_family)
     _equipment = parse_equipment(text)
 
     if projects and _hr:
@@ -77,6 +82,10 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
                 "description": row.get("description"),
                 "amount": row.get("amount"),
             }
+            # v1/v2 enrichment fields — included when present
+            for _extra in ("supplier_cnpj_raw", "supplier_name", "service_status"):
+                if row.get(_extra) is not None:
+                    exp_item[_extra] = row[_extra]
             exp_by_project.setdefault(idx, []).append(exp_item)
 
         for i, p in enumerate(projects, start=1):
@@ -116,6 +125,7 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
             "projects": projects,
             "representatives": [],
             "fiscal_summary": None,
+            "summary_table": summary_table,
         },
         "submission_receipt": submission_receipt,
         "company_registry": company_registry,
@@ -134,6 +144,9 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
     is_valid, confidence, missing_fields, needs_ai = validate_result(payload, version_info=version_info)
     payload["is_valid_formpd"] = is_valid
 
+    # Scoring engine — replaces raw confidence/missing_fields logic
+    score_result = compute_score(payload, version_info, summary_table=summary_table)
+
     high_priority_fields = {
         "company_info.cnpj",
         "fiscal_year",
@@ -148,42 +161,45 @@ def run_deterministic_extraction(pdf_bytes: bytes, original_name: str) -> Extrac
             "reason": "deterministic_not_confident",
             "priority": "high" if f in high_priority_fields else "medium",
         }
-        for f in missing_fields
+        for f in score_result["ai_priority_fields"]
     ]
     payload["meta"]["quality_policy"] = {
         "family": version_info.get("family"),
+        "profile": _profile,
         "requires_receipt": version_info.get("family") in {"v2_intermediate_2019_2022", "v3_modern_2023_plus"},
-        "missing_count": len(missing_fields),
+        "missing_count": len(score_result["missing_mandatory"]),
+        "score": score_result,
     }
 
     logger.info(
-        "extract completed | valid=%s confidence=%s needs_ai=%s missing=%s family=%s signals=%s",
+        "extract completed | valid=%s score=%.2f band=%s needs_ai=%s missing=%s profile=%s",
         is_valid,
-        confidence,
-        needs_ai,
-        ",".join(missing_fields) if missing_fields else "none",
-        version_info.get("family"),
-        version_info.get("signal_count"),
+        score_result["score_pct"],
+        score_result["score_band"],
+        score_result["needs_ai"],
+        ",".join(score_result["missing_mandatory"]) if score_result["missing_mandatory"] else "none",
+        _profile,
     )
 
     persist_extraction(
         request_id=request_id,
         file_hash=file_hash,
         original_name=original_name,
-        parser_version="v1",
+        parser_version="v2",
         payload=payload
         | {
-            "confidence": confidence,
-            "missing_fields": missing_fields,
-            "needs_ai": needs_ai,
+            "confidence": score_result["score_band"],
+            "missing_fields": score_result["missing_mandatory"],
+            "needs_ai": score_result["needs_ai"],
+            "score": score_result,
         },
         raw_text=text,
     )
 
     return ExtractResponse(
         **payload,
-        confidence=confidence,
-        missing_fields=missing_fields,
+        confidence=score_result["score_band"],
+        missing_fields=score_result["missing_mandatory"],
         ai_candidates=ai_candidates,
-        needs_ai=needs_ai,
+        needs_ai=score_result["needs_ai"],
     )
