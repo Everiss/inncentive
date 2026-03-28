@@ -430,6 +430,16 @@ export class ImportsService {
         data: { file_job_id: job.id },
       });
 
+      // Auto-enqueue AI when score is LOW (< 60%) and company is known
+      if (status === 'PENDING_REVIEW') {
+        const qualityScore = (extraction?.meta?.quality_policy as any)?.score as Record<string, any> | undefined;
+        const scoreBand: string | undefined = qualityScore?.score_band;
+        const aiPriorityFields: string[] = Array.isArray(qualityScore?.ai_priority_fields) ? qualityScore.ai_priority_fields : [];
+        if (scoreBand === 'LOW') {
+          await this.enqueueAi(String(batch.id), { fields: aiPriorityFields });
+        }
+      }
+
       await this.fileHubClientService.markJobCompleted(intake.fileId, job.id, intake.intakeId, {
         batchId: batch.id,
         status,

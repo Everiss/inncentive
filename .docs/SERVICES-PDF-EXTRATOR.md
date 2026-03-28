@@ -439,10 +439,16 @@ def score(completeness: float, confidence: float, cross_validation: float) -> fl
 - `summary_table` adicionado em `form_data` e passado ao scorer para CV-05/CV-06
 - Thresholds: ≥0.85 → HIGH, 0.60–0.84 → MEDIUM, <0.60 → LOW
 
-### Sprint 4 — Qualidade e observabilidade
+### Sprint 4 — Qualidade e observabilidade ✅ CONCLUÍDO
 
 | # | Entregável | Descrição |
 |---|---|---|
-| 15 | UI revisão | Exibir `overall_score` e `ai_priority_fields` por lote na tela de revisão |
+| 15 ✅ | UI revisão | `ScorePanel` em `TabForms.tsx`: gauge HIGH/MEDIUM/LOW + barra completude/confiança/CV + campos ausentes + falhas CV collapsível |
 | 16 | Testes de fixture | Um PDF por versão com asserções nos campos extraídos |
-| 17 | Alerta automático | `financial_coverage_pct < 50%` → enfileirar IA automaticamente |
+| 17 ✅ | Alerta automático | `score_band === 'LOW'` → `enqueueAi()` automático em `imports.service.ts` após `persistFormBatch` |
+
+**Item 15 — implementado em** `frontend/src/components/TabForms.tsx`:
+- `ExtractionScore` interface com todos os campos do scorer
+- `ScorePanel` component: `score_pct` + `score_band` badge (HIGH=verde, MEDIUM=âmbar, LOW=vermelho), mini-barras horizontais para completude/confiança/cross_validation, tags de `ai_priority_fields`, seção colapsável de CV failures
+- Score extraído de `parsed.meta.quality_policy.score` no `openReview`
+- Fallback para banner antigo de "IA recomendada" quando score não está disponível
