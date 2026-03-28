@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "pdf-extractor"
 version = "0.1.0"
 description = "Deterministic PDF extraction microservice for FORMP&D"
@@ -17,6 +17,14 @@ dependencies = [
 [project.optional-dependencies]
 ocr = ["pytesseract==0.3.13", "opencv-python==4.12.0.88"]
 tables = ["camelot-py==1.0.9", "tabula-py==2.10.0"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
 
 [tool.uvicorn]
 factory = false

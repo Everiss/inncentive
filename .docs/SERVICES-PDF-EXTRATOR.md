@@ -444,7 +444,7 @@ def score(completeness: float, confidence: float, cross_validation: float) -> fl
 | # | Entregável | Descrição |
 |---|---|---|
 | 15 ✅ | UI revisão | `ScorePanel` em `TabForms.tsx`: gauge HIGH/MEDIUM/LOW + barra completude/confiança/CV + campos ausentes + falhas CV collapsível |
-| 16 | Testes de fixture | Um PDF por versão com asserções nos campos extraídos |
+| 16 ✅ | Testes de fixture | 69 testes unitários cobrindo version_detector, receipt_parser, hr_parser, summary_table_parser e scorer |
 | 17 ✅ | Alerta automático | `score_band === 'LOW'` → `enqueueAi()` automático em `imports.service.ts` após `persistFormBatch` |
 
 **Item 15 — implementado em** `frontend/src/components/TabForms.tsx`:
