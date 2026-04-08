@@ -70,6 +70,7 @@ model companies {
   ia_executions              ia_executions[]
   import_batches             import_batches[]
   files                      files[]
+  programs                   programs[]
 }
 
 model company_cnaes {
@@ -195,6 +196,8 @@ model contacts {
   files_files_uploaded_byTocontacts                            files[]                              @relation("files_uploaded_byTocontacts")
   file_intakes_file_intakes_received_byTocontacts              file_intakes[]                       @relation("file_intakes_received_byTocontacts")
   file_events_file_events_actor_contact_idTocontacts           file_events[]                        @relation("file_events_actor_contact_idTocontacts")
+  programs_responsible                                          programs[]
+  program_stages_assigned                                       program_stages[]
 }
 
 /// A contact can be linked to many companies, with a different role per link.
@@ -402,6 +405,7 @@ model formpd_forms {
   formpd_opinions             formpd_opinions[]
   formpd_project_mapping      formpd_project_mapping[]
   formpd_projects             formpd_projects[]
+  programs                    programs[]
 
   @@unique([company_id, base_year], map: "uq_company_year")
 }
@@ -1224,6 +1228,7 @@ model rdi_projects {
   companies                    companies                       @relation(fields: [company_id], references: [id], onUpdate: NoAction, map: "fk_rdi_proj_company")
   contacts                     contacts?                       @relation(fields: [owner_contact_id], references: [id], onUpdate: NoAction, map: "fk_rdi_proj_owner")
   rdi_timesheet_entries        rdi_timesheet_entries[]
+  program_rdi_projects         program_rdi_projects[]
 
   @@index([owner_contact_id], map: "fk_rdi_proj_owner")
   @@index([company_id], map: "idx_rdi_projects_company_year")
@@ -1273,6 +1278,134 @@ model user_company_access {
   @@unique([user_id, company_id], map: "uq_user_company")
   @@index([granted_by], map: "fk_access_granter")
   @@index([company_id], map: "idx_access_company")
+}
+
+/// Programa de incentivo fiscal — ciclo operacional que antecede a obrigação (FORMp&D, etc.)
+/// Um programa por empresa + produto + ano-base.
+model programs {
+  id                     Int                    @id @default(autoincrement())
+  company_id             Int
+  incentive_type         programs_incentive_type
+  base_year              Int                    @db.SmallInt
+  status                 programs_status        @default(RASCUNHO)
+  title                  String?                @db.VarChar(255)
+  responsible_contact_id Int?
+  notes                  String?                @db.Text
+  formpd_form_id         Int?
+  created_at             DateTime               @default(now()) @db.Timestamp(0)
+  updated_at             DateTime               @default(now()) @updatedAt @db.DateTime(0)
+  companies              companies              @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_programs_company")
+  contacts               contacts?              @relation(fields: [responsible_contact_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_programs_responsible")
+  formpd_forms           formpd_forms?          @relation(fields: [formpd_form_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_programs_formpd")
+  stages                 program_stages[]
+  documents              program_documents[]
+  rdi_projects           program_rdi_projects[]
+
+  @@unique([company_id, incentive_type, base_year], map: "uq_program_company_type_year")
+  @@index([company_id], map: "idx_programs_company")
+  @@index([status], map: "idx_programs_status")
+  @@index([formpd_form_id], map: "idx_programs_formpd")
+  @@index([responsible_contact_id], map: "idx_programs_responsible")
+}
+
+/// Etapa operacional dentro de um programa de incentivo.
+model program_stages {
+  id                    Int                   @id @default(autoincrement())
+  program_id            Int
+  stage_type            program_stages_type
+  status                program_stages_status @default(PENDENTE)
+  title                 String?               @db.VarChar(255)
+  notes                 String?               @db.Text
+  due_date              DateTime?             @db.Date
+  completed_at          DateTime?             @db.DateTime(0)
+  assigned_contact_id   Int?
+  sort_order            Int                   @default(0) @db.TinyInt
+  created_at            DateTime              @default(now()) @db.Timestamp(0)
+  updated_at            DateTime              @default(now()) @updatedAt @db.DateTime(0)
+  programs              programs              @relation(fields: [program_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_stages_program")
+  contacts              contacts?             @relation(fields: [assigned_contact_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_stages_assigned")
+
+  @@unique([program_id, stage_type], map: "uq_stage_program_type")
+  @@index([program_id], map: "idx_stages_program")
+  @@index([status], map: "idx_stages_status")
+  @@index([assigned_contact_id], map: "idx_stages_assigned")
+}
+
+/// Evidência ou documento vinculado ao programa (ECF, ECD, DIRBI, balancete, etc.)
+model program_documents {
+  id               Int                      @id @default(autoincrement())
+  program_id       Int
+  doc_type         program_documents_type
+  description      String?                  @db.VarChar(500)
+  reference_year   Int?                     @db.SmallInt
+  reference_period String?                  @db.VarChar(20)
+  file_id          String?                  @db.VarChar(36)
+  external_ref     String?                  @db.VarChar(255)
+  notes            String?                  @db.Text
+  created_at       DateTime                 @default(now()) @db.Timestamp(0)
+  programs         programs                 @relation(fields: [program_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_prog_docs_program")
+
+  @@index([program_id], map: "idx_prog_docs_program")
+  @@index([doc_type], map: "idx_prog_docs_type")
+  @@index([file_id], map: "idx_prog_docs_file")
+}
+
+/// Junction: projetos RDI vinculados a um programa.
+model program_rdi_projects {
+  program_id     Int
+  rdi_project_id Int
+  created_at     DateTime    @default(now()) @db.Timestamp(0)
+  programs       programs    @relation(fields: [program_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_prp_program")
+  rdi_projects   rdi_projects @relation(fields: [rdi_project_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_prp_rdi_project")
+
+  @@id([program_id, rdi_project_id])
+  @@index([rdi_project_id], map: "idx_prp_project")
+}
+
+enum programs_incentive_type {
+  LEI_DO_BEM
+  LEI_DA_INFORMATICA
+  ROTA_2030
+}
+
+enum programs_status {
+  RASCUNHO
+  EM_ANDAMENTO
+  EM_REVISAO
+  FINALIZADO
+  SUBMETIDO
+}
+
+enum program_stages_type {
+  COLETA_DADOS
+  ANALISE_ELEGIBILIDADE
+  DEFINICAO_ESTRATEGIA
+  CALCULO_AGRUPAMENTO
+  ENTREGAVEIS_INICIAIS
+  AUDITORIA_VALIDACAO
+  EVIDENCIAS_FISCAIS
+  ELABORACAO_OBRIGACAO
+}
+
+enum program_stages_status {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDO
+  NAO_APLICAVEL
+}
+
+enum program_documents_type {
+  ECF
+  ECD
+  DIRBI
+  BALANCETE
+  RELATORIO_LINHA_PESQUISA
+  FOLHA_PAGAMENTO
+  TIMESHEET
+  NOTA_FISCAL
+  CONTRATO
+  LAUDO_TECNICO
+  OUTRO
 }
 
 enum system_role {
@@ -1864,8 +1997,8 @@ model files {
   contacts      contacts?      @relation("files_uploaded_byTocontacts", fields: [uploaded_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_files_uploader")
   file_intakes  file_intakes[]
   file_jobs     file_jobs[]
-  file_events   file_events[]
-  import_batches import_batches[]
+  file_events        file_events[]
+  import_batches     import_batches[]
 
   @@index([uploaded_by], map: "fk_files_uploader")
   @@index([company_id, created_at], map: "idx_files_company_date")

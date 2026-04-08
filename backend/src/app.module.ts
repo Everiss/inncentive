@@ -10,6 +10,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ProjectsModule } from './projects/projects.module';
 import { FormpdModule } from './formpd/formpd.module';
 import { ImportsModule } from './imports/imports.module';
+import { ProgramsModule } from './programs/programs.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ImportsModule } from './imports/imports.module';
     ProjectsModule,
     FormpdModule,
     ImportsModule,
+    ProgramsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

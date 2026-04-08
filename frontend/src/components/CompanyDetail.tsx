@@ -11,8 +11,9 @@ import { ImportCompaniesModal } from './modals/ImportCompaniesModal';
 import ProjectsList from './ProjectsList';
 import ContactsList from './ContactsList';
 import CollaboratorsList from './CollaboratorsList';
-import FormPDList from './FormPDList';
 import TabForms from './TabForms';
+import ProgramsList from './ProgramsList';
+import ProgramDetail from './ProgramDetail';
 
 interface Props {
   companyId: number;
@@ -238,6 +239,7 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<CompanyTab>('resumo');
+  const [selectedProgramId, setSelectedProgramId] = useState<number | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const fetchCompany = () => {
@@ -298,7 +300,22 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
             case 'colaboradores': return <CollaboratorsList companyId={companyId} />;
             case 'projetos':      return <ProjectsList companyId={companyId} />;
             case 'fornecedores':   return <TabPlaceholder label="Fornecedores" />;
-            case 'programas':      return <FormPDList companyId={companyId} />;
+            case 'programas':
+              if (selectedProgramId) {
+                return (
+                  <ProgramDetail
+                    programId={selectedProgramId}
+                    onBack={() => setSelectedProgramId(null)}
+                  />
+                );
+              }
+              return (
+                <ProgramsList
+                  companyId={companyId}
+                  companyName={company.legal_name}
+                  onOpenProgram={(id) => setSelectedProgramId(id)}
+                />
+              );
             case 'forms':          return <TabForms companyId={companyId} cnpj={company.cnpj} />;
             default:              return null;
           }
@@ -359,7 +376,7 @@ export default function CompanyDetail({ companyId, onBack }: Props) {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => { setActiveTab(tab.key); setSelectedProgramId(null); }}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-all border-b-2 shrink-0
                   ${isActive
                     ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 bg-blue-50/50 dark:bg-slate-800/50'
