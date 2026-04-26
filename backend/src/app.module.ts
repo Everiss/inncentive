@@ -11,6 +11,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { FormpdModule } from './formpd/formpd.module';
 import { ImportsModule } from './imports/imports.module';
 import { ProgramsModule } from './programs/programs.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ProgramsModule } from './programs/programs.module';
     FormpdModule,
     ImportsModule,
     ProgramsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -13,6 +13,7 @@ import { socket } from './api/socket';
 import { Toaster, toast } from 'react-hot-toast';
 import ImportBatchesList from './components/ImportBatchesList';
 import FormsList from './components/FormsList';
+import Dashboard from './components/Dashboard';
 
 type Tab = 'dashboard' | 'empresas' | 'contatos' | 'colaboradores' | 'projetos' | 'programas' | 'processamentos' | 'forms' | 'settings';
 
@@ -194,7 +195,13 @@ export default function App() {
               </motion.div>
             )}
             
-            {(activeTab === 'dashboard' || activeTab === 'settings' || activeTab === 'programas') && (
+            {activeTab === 'dashboard' && (
+              <motion.div key="dashboard" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <Dashboard onNavigate={(tab) => setActiveTab(tab as Tab)} />
+              </motion.div>
+            )}
+
+            {(activeTab === 'settings' || activeTab === 'programas') && (
                <motion.div key="other" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                  <div className="p-12 text-center text-blue-500 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-blue-100 dark:border-slate-800">
                     Módulo em desenvolvimento ({activeTab}).
